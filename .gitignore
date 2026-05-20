@@ -30,3 +30,5 @@ yarn-error.log
 /database/seeders/DivisionSeeder.php
 /database/seeders/AppSettingsSeeder.php
 /database/seeders/UserSeeder.php
+/n8n.md
+/postman_collection.json
