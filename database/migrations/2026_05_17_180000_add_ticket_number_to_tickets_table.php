@@ -31,7 +31,8 @@ return new class extends Migration
                 WHERE t.id = ordered.id
             ");
 
-            DB::statement("SELECT setval('tickets_ticket_seq_seq', (SELECT COALESCE(MAX(ticket_seq), 0) FROM tickets))");
+            // setval(…, 0) invalid karena sequence START 1; jika tabel kosong, set sequence agar nextval() mengembalikan 1.
+            DB::statement("SELECT setval('tickets_ticket_seq_seq', GREATEST((SELECT COALESCE(MAX(ticket_seq), 0) FROM tickets), 1), true)");
             DB::statement("ALTER TABLE tickets ALTER COLUMN ticket_seq SET DEFAULT nextval('tickets_ticket_seq_seq')");
 
             DB::statement("
