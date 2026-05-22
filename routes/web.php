@@ -3,7 +3,7 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\SatisfactionReviewController;
 
-Route::inertia('/', 'welcome')->name('home');
+Route::redirect('/', '/app/login')->name('home');
 
 Route::view('/app', 'spa')->name('spa');
 Route::view('/app/{any}', 'spa')
