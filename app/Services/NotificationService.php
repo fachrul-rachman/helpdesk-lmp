@@ -351,17 +351,23 @@ class NotificationService
             return;
         }
 
-        $link = URL::temporarySignedRoute(
+        // Meta template button URL sudah menyimpan base URL di dashboard Meta.
+        // Kita hanya kirim variable {{1}} berupa query string: ?customer_id=...&expires=...&ticket_id=...&signature=...
+        $signedRelative = URL::temporarySignedRoute(
             'review.satisfaction',
             now()->addDays(3),
             ['ticket_id' => $ticket->id, 'customer_id' => $ticket->customer_id],
+            absolute: false,
         );
+
+        $query = (string) (parse_url($signedRelative, PHP_URL_QUERY) ?? '');
+        $queryString = $query !== '' ? ('?'.$query) : '';
 
         $this->sendTemplateWithUrlButton(
             $customer->phone_number,
             'satisfaction_review',
             [],
-            $link,
+            $queryString,
         );
     }
 }
