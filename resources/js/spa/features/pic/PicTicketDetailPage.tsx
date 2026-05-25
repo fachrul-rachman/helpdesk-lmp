@@ -517,7 +517,7 @@ export function PicTicketDetailPage() {
             </div>
             </div>
 
-        <div className="hidden space-y-4 lg:order-2 lg:block">
+        <div className="hidden space-y-4 lg:order-2 lg:block lg:max-h-[calc(100dvh-140px)] lg:overflow-auto lg:pr-1">
                 <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
                     <div className="text-sm font-semibold text-slate-900">Data Customer</div>
                     <div className="mt-3 space-y-1 text-sm text-slate-700">

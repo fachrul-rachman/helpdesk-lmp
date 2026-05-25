@@ -690,7 +690,9 @@ export function SpvTicketDetailPage() {
                     </div>
                 </div>
 
-                <div className="hidden lg:order-2 lg:block">{DetailPanel}</div>
+                <div className="hidden lg:order-2 lg:block lg:max-h-[calc(100dvh-140px)] lg:overflow-auto lg:pr-1">
+                    {DetailPanel}
+                </div>
             </div>
 
             {isDrawerOpen ? (
