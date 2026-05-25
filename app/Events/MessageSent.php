@@ -2,6 +2,7 @@
 
 namespace App\Events;
 
+use App\Models\Ticket;
 use Illuminate\Broadcasting\InteractsWithSockets;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
@@ -23,7 +24,19 @@ class MessageSent implements ShouldBroadcast
     {
         $ticketId = (string) ($this->data['ticket_id'] ?? '');
 
-        return [new PrivateChannel("ticket.{$ticketId}")];
+        $channels = [
+            new PrivateChannel("ticket.{$ticketId}"),
+            new PrivateChannel('dashboard.spv'),
+        ];
+
+        if ($ticketId !== '') {
+            $assignedTo = (string) (Ticket::query()->where('id', $ticketId)->value('assigned_to') ?? '');
+            if ($assignedTo !== '') {
+                $channels[] = new PrivateChannel("App.Models.User.{$assignedTo}");
+            }
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string
@@ -39,4 +52,3 @@ class MessageSent implements ShouldBroadcast
         ];
     }
 }
-

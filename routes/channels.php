@@ -23,4 +23,3 @@ Broadcast::channel('ticket.{ticketId}', function ($user, string $ticketId) {
 
     return (string) ($ticket->assigned_to ?? '') === (string) $user->id;
 });
-

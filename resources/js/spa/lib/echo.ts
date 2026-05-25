@@ -16,9 +16,9 @@ function buildEcho() {
         wsHost: import.meta.env.VITE_REVERB_HOST,
         wsPort: Number(import.meta.env.VITE_REVERB_PORT),
         wssPort: Number(import.meta.env.VITE_REVERB_PORT),
-        forceTLS: import.meta.env.PROD,
+        forceTLS: import.meta.env.VITE_REVERB_SCHEME === 'https',
         enabledTransports: ['ws', 'wss'],
-        authEndpoint: `${import.meta.env.VITE_API_URL}/broadcasting/auth`,
+        authEndpoint: `${import.meta.env.VITE_API_URL}/api/broadcasting/auth`,
         auth: {
             headers: {
                 ...(token ? { Authorization: `Bearer ${token}` } : {}),
