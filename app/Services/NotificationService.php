@@ -353,14 +353,16 @@ class NotificationService
 
         // Meta template button URL sudah menyimpan base URL di dashboard Meta.
         // Kita hanya kirim variable {{1}} berupa query string: ?customer_id=...&expires=...&ticket_id=...&signature=...
-        $signedRelative = URL::temporarySignedRoute(
+        //
+        // PENTING: Route ini memakai middleware `signed` (absolute). Jadi signature harus dibuat dari URL ABSOLUTE,
+        // lalu kita kirim hanya bagian query string-nya untuk ditempelkan oleh Meta ke base URL.
+        $signedAbsolute = URL::temporarySignedRoute(
             'review.satisfaction',
             now()->addDays(3),
             ['ticket_id' => $ticket->id, 'customer_id' => $ticket->customer_id],
-            absolute: false,
         );
 
-        $query = (string) (parse_url($signedRelative, PHP_URL_QUERY) ?? '');
+        $query = (string) (parse_url($signedAbsolute, PHP_URL_QUERY) ?? '');
         $queryString = $query !== '' ? ('?'.$query) : '';
 
         $this->sendTemplateWithUrlButton(
