@@ -344,8 +344,7 @@ class ProcessWhatsAppIncomingMessageJob implements ShouldQueue
             return;
         }
 
-        $introText = "Perkenalkan saya Lestari, AI Customer Service di Lestari Memorial Park yang siap melayani kebutuhan Anda.\n\nMohon informasikan kendala atau pertanyaan Anda secara detail dan lengkap agar saya dapat membantu dengan lebih cepat dan tepat.";
-
+        $introText = "Perkenalkan saya Lestari, Asisten AI yang bisa membantu kebutuhan atas pertanyaan dan kendala Anda serta menghubungkan dengan tim terkait jika diperlukan.\n_Catatan_: saya masih bisa keliru dan salah. Untuk hal penting, mohon cek dan konfirmasi kembali ya.";
         try {
             app(NotificationService::class)->sendText($phone, $introText);
         } catch (\Throwable $e) {
