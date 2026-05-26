@@ -61,33 +61,7 @@ class ProcessWhatsAppIncomingMessageJob implements ShouldQueue
             $customer->update(['name' => $customerName]);
         }
 
-        $wasFirstInteraction = $customer->last_interaction_at === null;
         $customer->update(['last_interaction_at' => now()]);
-
-        if ($wasFirstInteraction && $customer->phone_number) {
-            $already = DB::table('audit_logs')
-                ->where('action', 'customer.ai_introduction_sent')
-                ->where('subject_type', 'Customer')
-                ->where('subject_id', $customer->id)
-                ->exists();
-
-            if (!$already) {
-                try {
-                    app(NotificationService::class)->sendAiIntroduction($customer->phone_number, (string) ($customer->name ?? ''));
-                    DB::table('audit_logs')->insert([
-                        'user_id' => null,
-                        'action' => 'customer.ai_introduction_sent',
-                        'subject_type' => 'Customer',
-                        'subject_id' => $customer->id,
-                        'payload' => null,
-                        'ip_address' => null,
-                        'created_at' => now(),
-                    ]);
-                } catch (\Throwable $e) {
-                    Log::warning('ai_introduction.first_chat_failed', ['customer_id' => $customer->id, 'error' => $e->getMessage()]);
-                }
-            }
-        }
 
         $activeTicket = Ticket::query()
             ->where('customer_id', $customer->id)
@@ -200,6 +174,9 @@ class ProcessWhatsAppIncomingMessageJob implements ShouldQueue
         }
 
         if ($shouldForwardToN8n && $n8nEvent) {
+            $this->maybeSendAiReIntroduction($customer);
+            $this->logAiInteraction($customer);
+
             $this->debouncedForwardToN8n(
                 event: $n8nEvent,
                 customer: $customer,
@@ -324,5 +301,102 @@ class ProcessWhatsAppIncomingMessageJob implements ShouldQueue
 
         $pending['last_updated_at'] = $now->toISOString();
         Cache::put($cacheKey, $pending, now()->addMinutes(15));
+    }
+
+    private function maybeSendAiReIntroduction(Customer $customer): void
+    {
+        $phone = (string) ($customer->phone_number ?? '');
+        if ($phone === '') {
+            return;
+        }
+
+        $cooldownDays = 14;
+        $cutoff = CarbonImmutable::now()->subDays($cooldownDays);
+
+        $lastInteractionAt = DB::table('audit_logs')
+            ->where('action', 'customer.ai_interaction')
+            ->where('subject_type', 'Customer')
+            ->where('subject_id', $customer->id)
+            ->max('created_at');
+
+        $lastIntroAt = DB::table('audit_logs')
+            ->where('action', 'customer.ai_introduction_sent')
+            ->where('subject_type', 'Customer')
+            ->where('subject_id', $customer->id)
+            ->max('created_at');
+
+        $lastAt = null;
+        if ($lastInteractionAt) {
+            try {
+                $lastAt = CarbonImmutable::parse($lastInteractionAt);
+            } catch (\Throwable) {
+                $lastAt = null;
+            }
+        } elseif ($lastIntroAt) {
+            try {
+                $lastAt = CarbonImmutable::parse($lastIntroAt);
+            } catch (\Throwable) {
+                $lastAt = null;
+            }
+        }
+
+        if ($lastAt && $lastAt->greaterThan($cutoff)) {
+            return;
+        }
+
+        $introText = 'Halo, perkenalkan saya Lestari, AI Assistant yang akan membantu Bapak/Ibu.';
+
+        try {
+            app(NotificationService::class)->sendText($phone, $introText);
+        } catch (\Throwable $e) {
+            Log::warning('ai_introduction.send_failed', ['customer_id' => $customer->id, 'error' => $e->getMessage()]);
+            return;
+        }
+
+        $message = Message::create([
+            'ticket_id' => null,
+            'customer_id' => $customer->id,
+            'sender_type' => 'system',
+            'sender_id' => null,
+            'content' => $introText,
+            'wa_message_id' => null,
+            'created_at' => now(),
+        ]);
+
+        event(new AiConversationUpdated([
+            'customer' => [
+                'id' => $customer->id,
+                'name' => $customer->name,
+                'phone_number' => $customer->phone_number,
+            ],
+            'message' => [
+                'sender_type' => 'system',
+                'content' => $message->content,
+                'created_at' => optional($message->created_at)->toISOString(),
+            ],
+        ]));
+
+        DB::table('audit_logs')->insert([
+            'user_id' => null,
+            'action' => 'customer.ai_introduction_sent',
+            'subject_type' => 'Customer',
+            'subject_id' => $customer->id,
+            'payload' => null,
+            'ip_address' => null,
+            'created_at' => now(),
+        ]);
+    }
+
+    private function logAiInteraction(Customer $customer): void
+    {
+        DB::table('audit_logs')->insert([
+            'user_id' => null,
+            'action' => 'customer.ai_interaction',
+            'subject_type' => 'Customer',
+            'subject_id' => $customer->id,
+            'payload' => null,
+            'ip_address' => null,
+            'created_at' => now(),
+        ]);
     }
 }

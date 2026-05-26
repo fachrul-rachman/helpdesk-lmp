@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Webhook;
 
+use App\Events\MessageSent;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\Message;
@@ -58,7 +59,7 @@ class N8nWebhookController extends Controller
             $customer = $ticket->customer;
             $this->ticketService->sendTextToCustomer($customer->phone_number, $aiReply);
 
-            Message::create([
+            $message = Message::create([
                 'ticket_id' => $ticket->id,
                 'customer_id' => $customer->id,
                 'sender_type' => 'ai',
@@ -67,6 +68,8 @@ class N8nWebhookController extends Controller
                 'wa_message_id' => null,
                 'created_at' => now(),
             ]);
+
+            event(new MessageSent($this->ticketService->formatMessage($message)));
         }
 
         // Konfirmasi pembuatan ticket ke customer (pesan sistem).
@@ -89,7 +92,7 @@ class N8nWebhookController extends Controller
 
             $this->ticketService->sendTextToCustomer($customer->phone_number, $text);
 
-            Message::create([
+            $message = Message::create([
                 'ticket_id' => $ticket->id,
                 'customer_id' => $customer->id,
                 'sender_type' => 'system',
@@ -98,6 +101,8 @@ class N8nWebhookController extends Controller
                 'wa_message_id' => null,
                 'created_at' => now(),
             ]);
+
+            event(new MessageSent($this->ticketService->formatMessage($message)));
         }
 
         return response()->json(['success' => true, 'ticket_id' => $ticket->id], 200);

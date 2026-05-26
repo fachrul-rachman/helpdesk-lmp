@@ -97,7 +97,8 @@ test('incoming message forwarded to n8n if no active ticket', function () {
     $response->assertOk();
 
     expect(Customer::count())->toBe(1);
-    expect(\App\Models\Message::count())->toBe(1);
+    expect(\App\Models\Message::count())->toBe(2);
+    expect(\App\Models\Message::query()->where('sender_type', 'system')->count())->toBe(1);
 
     Http::assertSent(function ($request) {
         return str_starts_with((string) $request->url(), 'https://n8n.example.com/webhook/abc')
