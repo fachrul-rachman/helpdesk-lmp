@@ -1100,11 +1100,15 @@ class TicketService
         $mediaService = app(MediaService::class);
 
         $mediaType = strtolower(trim((string) ($aiReply['media_type'] ?? '')));
+        $typeFromKey = $mediaService->classifyTypeFromKey($key);
         if ($mediaType === '') {
-            $mediaType = $mediaService->classifyTypeFromKey($key);
+            $mediaType = $typeFromKey;
         }
         if (! in_array($mediaType, ['image', 'video', 'document'], true)) {
             throw new HttpException(422, 'media_type tidak valid.');
+        }
+        if ($mediaType !== $typeFromKey) {
+            throw new HttpException(422, 'media_type tidak sesuai dengan ekstensi file.');
         }
 
         $mimeType = $mediaService->mimeTypeFromKey($key);

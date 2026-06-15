@@ -217,6 +217,25 @@ test('ai media reply rejects unsafe storage key', function () {
     $resp->assertStatus(422);
 });
 
+test('ai media reply rejects media type that does not match file extension', function () {
+    Customer::create(['phone_number' => '628123456789', 'name' => 'Andi']);
+
+    $resp = $this->postJson('/api/webhook/n8n', [
+        'event' => 'message.reply',
+        'customer_phone_number' => '08123456789',
+        'ai_reply' => [
+            'type' => 'media',
+            'media_type' => 'image',
+            'key' => 'media/2026/05/Update Zone B Tangerang 15 Mei 2026.pdf',
+            'caption' => 'Berikut filenya.',
+        ],
+    ], [
+        'X-N8N-Secret' => 'incoming-secret',
+    ]);
+
+    $resp->assertStatus(422);
+});
+
 test('reopen from on_progress', function () {
     $division = Division::create([
         'name' => 'Teknis',
