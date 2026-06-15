@@ -236,6 +236,42 @@ test('ai media reply rejects media type that does not match file extension', fun
     $resp->assertStatus(422);
 });
 
+test('ai media reply can send image file as document fallback', function () {
+    Http::fake([
+        'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
+    ]);
+
+    putenv('META_WA_TOKEN=meta-token');
+    putenv('META_WA_PHONE_NUMBER_ID=PHONE_ID');
+    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
+    putenv('CLOUDFLARE_R2_URL=https://cdn.example.test');
+    $_ENV['META_WA_TOKEN'] = 'meta-token';
+    $_ENV['META_WA_PHONE_NUMBER_ID'] = 'PHONE_ID';
+    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
+    $_ENV['CLOUDFLARE_R2_URL'] = 'https://cdn.example.test';
+
+    Customer::create(['phone_number' => '628123456789', 'name' => 'Andi']);
+
+    $resp = $this->postJson('/api/webhook/n8n', [
+        'event' => 'message.reply',
+        'customer_phone_number' => '08123456789',
+        'ai_reply' => [
+            'type' => 'media',
+            'media_type' => 'document',
+            'key' => 'media/2026/05/sitemap-karawang.png',
+            'caption' => 'Berikut filenya.',
+            'filename' => 'sitemap-karawang.png',
+        ],
+    ], [
+        'X-N8N-Secret' => 'incoming-secret',
+    ]);
+
+    $resp->assertOk();
+
+    Http::assertSent(fn ($request) => ($request['type'] ?? null) === 'document'
+        && (($request['document']['filename'] ?? null) === 'sitemap-karawang.png'));
+});
+
 test('reopen from on_progress', function () {
     $division = Division::create([
         'name' => 'Teknis',

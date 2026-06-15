@@ -33,11 +33,13 @@ class WhatsAppWebhookController extends Controller
     {
         $payload = $request->getContent();
 
-        if (!$this->isValidSignature($payload, (string) $request->header('X-Hub-Signature-256'))) {
+        if (! $this->isValidSignature($payload, (string) $request->header('X-Hub-Signature-256'))) {
             return response('Unauthorized.', 401);
         }
 
         $data = $request->json()->all();
+        $this->logStatuses($data);
+
         $messages = $this->extractMessages($data);
 
         foreach ($messages as $messagePayload) {
@@ -50,13 +52,74 @@ class WhatsAppWebhookController extends Controller
     private function isValidSignature(string $payload, ?string $headerSignature): bool
     {
         $secret = (string) (getenv('META_WA_APP_SECRET') ?: env('META_WA_APP_SECRET', ''));
-        if ($secret === '' || !$headerSignature) {
+        if ($secret === '' || ! $headerSignature) {
             return false;
         }
 
-        $computed = 'sha256=' . hash_hmac('sha256', $payload, $secret);
+        $computed = 'sha256='.hash_hmac('sha256', $payload, $secret);
 
         return hash_equals($computed, $headerSignature);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function logStatuses(array $data): void
+    {
+        try {
+            $entries = $data['entry'] ?? [];
+            if (! is_array($entries)) {
+                return;
+            }
+
+            foreach ($entries as $entry) {
+                if (! is_array($entry)) {
+                    continue;
+                }
+
+                $changes = $entry['changes'] ?? [];
+                if (! is_array($changes)) {
+                    continue;
+                }
+
+                foreach ($changes as $change) {
+                    if (! is_array($change)) {
+                        continue;
+                    }
+
+                    $value = $change['value'] ?? null;
+                    if (! is_array($value)) {
+                        continue;
+                    }
+
+                    $statuses = $value['statuses'] ?? [];
+                    if (! is_array($statuses)) {
+                        continue;
+                    }
+
+                    foreach ($statuses as $statusPayload) {
+                        if (! is_array($statusPayload)) {
+                            continue;
+                        }
+
+                        $status = (string) ($statusPayload['status'] ?? '');
+                        $level = $status === 'failed' ? 'warning' : 'info';
+
+                        Log::log($level, 'whatsapp.status', [
+                            'id' => $statusPayload['id'] ?? null,
+                            'recipient_id' => $statusPayload['recipient_id'] ?? null,
+                            'status' => $status !== '' ? $status : null,
+                            'timestamp' => $statusPayload['timestamp'] ?? null,
+                            'errors' => $statusPayload['errors'] ?? null,
+                            'conversation' => $statusPayload['conversation'] ?? null,
+                            'pricing' => $statusPayload['pricing'] ?? null,
+                        ]);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('whatsapp.status.parse_failed', ['error' => $e->getMessage()]);
+        }
     }
 
     /**
@@ -72,7 +135,7 @@ class WhatsAppWebhookController extends Controller
             $changes = $entry['changes'][0] ?? null;
             $value = $changes['value'] ?? null;
 
-            if (!is_array($value)) {
+            if (! is_array($value)) {
                 return [];
             }
 
@@ -80,12 +143,12 @@ class WhatsAppWebhookController extends Controller
             $customerName = is_array($contacts) ? (string) (($contacts['profile']['name'] ?? '') ?: '') : '';
 
             $messages = $value['messages'] ?? [];
-            if (!is_array($messages)) {
+            if (! is_array($messages)) {
                 return [];
             }
 
             foreach ($messages as $m) {
-                if (!is_array($m)) {
+                if (! is_array($m)) {
                     continue;
                 }
 

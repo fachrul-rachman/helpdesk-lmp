@@ -1107,7 +1107,7 @@ class TicketService
         if (! in_array($mediaType, ['image', 'video', 'document'], true)) {
             throw new HttpException(422, 'media_type tidak valid.');
         }
-        if ($mediaType !== $typeFromKey) {
+        if ($mediaType !== 'document' && $mediaType !== $typeFromKey) {
             throw new HttpException(422, 'media_type tidak sesuai dengan ekstensi file.');
         }
 

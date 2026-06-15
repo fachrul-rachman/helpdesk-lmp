@@ -2,9 +2,12 @@
 
 use App\Models\Customer;
 use App\Models\Division;
+use App\Models\Message;
+use App\Models\MessageAttachment;
 use App\Models\Ticket;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
@@ -42,7 +45,7 @@ function metaEnvelope(array $message, string $customerName = 'Andi'): array
 
 function signPayload(string $payload, string $secret): string
 {
-    return 'sha256=' . hash_hmac('sha256', $payload, $secret);
+    return 'sha256='.hash_hmac('sha256', $payload, $secret);
 }
 
 beforeEach(function () {
@@ -97,8 +100,8 @@ test('incoming message forwarded to n8n if no active ticket', function () {
     $response->assertOk();
 
     expect(Customer::count())->toBe(1);
-    expect(\App\Models\Message::count())->toBe(2);
-    expect(\App\Models\Message::query()->where('sender_type', 'system')->count())->toBe(1);
+    expect(Message::count())->toBe(2);
+    expect(Message::query()->where('sender_type', 'system')->count())->toBe(1);
 
     Http::assertSent(function ($request) {
         return str_starts_with((string) $request->url(), 'https://n8n.example.com/webhook/abc')
@@ -159,7 +162,7 @@ test('incoming message not forwarded if active ticket exists', function () {
         'HTTP_X_HUB_SIGNATURE_256' => $signature,
     ], $payload)->assertOk();
 
-    $message = \App\Models\Message::query()->firstOrFail();
+    $message = Message::query()->firstOrFail();
     expect($message->ticket_id)->toBe($ticket->id);
 
     Http::assertNothingSent();
@@ -217,7 +220,7 @@ test('incoming message on on_progress forwarded to n8n with ticket context', fun
         'HTTP_X_HUB_SIGNATURE_256' => $signature,
     ], $payload)->assertOk();
 
-    $message = \App\Models\Message::query()->firstOrFail();
+    $message = Message::query()->firstOrFail();
     expect($message->ticket_id)->toBeNull();
 
     Http::assertSent(function ($request) use ($ticket) {
@@ -299,8 +302,55 @@ test('media downloaded from meta and uploaded to r2', function () {
         'HTTP_X_HUB_SIGNATURE_256' => $signature,
     ], $payload)->assertOk();
 
-    expect(\App\Models\MessageAttachment::count())->toBe(1);
+    expect(MessageAttachment::count())->toBe(1);
 
-    $attachment = \App\Models\MessageAttachment::query()->firstOrFail();
+    $attachment = MessageAttachment::query()->firstOrFail();
     Storage::disk('r2')->assertExists($attachment->r2_key);
+});
+
+test('delivery status webhook is logged', function () {
+    Log::spy();
+
+    $payload = json_encode([
+        'object' => 'whatsapp_business_account',
+        'entry' => [
+            [
+                'id' => 'WABA_ID',
+                'changes' => [
+                    [
+                        'field' => 'messages',
+                        'value' => [
+                            'messaging_product' => 'whatsapp',
+                            'statuses' => [
+                                [
+                                    'id' => 'wamid.out',
+                                    'recipient_id' => '628123456789',
+                                    'status' => 'failed',
+                                    'timestamp' => (string) time(),
+                                    'errors' => [
+                                        [
+                                            'code' => 131053,
+                                            'title' => 'Media upload error',
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ], JSON_UNESCAPED_SLASHES);
+    $signature = signPayload($payload, 'test-secret');
+
+    $this->call('POST', '/api/webhook/whatsapp', [], [], [], [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_HUB_SIGNATURE_256' => $signature,
+    ], $payload)->assertOk();
+
+    Log::shouldHaveReceived('log')
+        ->withArgs(fn ($level, $message, $context) => $level === 'warning'
+            && $message === 'whatsapp.status'
+            && ($context['id'] ?? null) === 'wamid.out'
+            && ($context['status'] ?? null) === 'failed');
 });

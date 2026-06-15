@@ -18,6 +18,7 @@ class SendWhatsAppMessageJob implements ShouldQueue
      * Retry 1x setelah 30 detik jika gagal (sesuai spesifikasi).
      */
     public int $tries = 2;
+
     public int $backoff = 30;
 
     /**
@@ -29,7 +30,7 @@ class SendWhatsAppMessageJob implements ShouldQueue
         private readonly array $logContext = [],
         private readonly bool $enableRetry = true,
     ) {
-        if (!$this->enableRetry) {
+        if (! $this->enableRetry) {
             $this->tries = 1;
             $this->backoff = 0;
         }
@@ -43,6 +44,7 @@ class SendWhatsAppMessageJob implements ShouldQueue
 
         if ($token === '' || $phoneNumberId === '' || $apiUrl === '') {
             Log::warning('meta.missing_config', $this->logContext);
+
             return;
         }
 
@@ -56,7 +58,9 @@ class SendWhatsAppMessageJob implements ShouldQueue
             if ($response->successful()) {
                 Log::info('meta.send.success', $this->logContext + [
                     'status' => $response->status(),
+                    'body' => $response->json(),
                 ]);
+
                 return;
             }
 
@@ -71,6 +75,7 @@ class SendWhatsAppMessageJob implements ShouldQueue
                     // Sertakan payload untuk debug (tanpa token; token ada di header, bukan payload).
                     'payload' => $this->payload,
                 ]);
+
                 return;
             }
 
@@ -79,7 +84,7 @@ class SendWhatsAppMessageJob implements ShouldQueue
                 'body' => $body,
             ]);
 
-            if (!$this->enableRetry) {
+            if (! $this->enableRetry) {
                 return;
             }
 
@@ -91,7 +96,7 @@ class SendWhatsAppMessageJob implements ShouldQueue
                 'attempt' => (int) $this->attempts(),
             ]);
 
-            if (!$this->enableRetry) {
+            if (! $this->enableRetry) {
                 return;
             }
 
