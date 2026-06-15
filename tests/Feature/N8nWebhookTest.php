@@ -2,6 +2,7 @@
 
 use App\Models\Customer;
 use App\Models\Division;
+use App\Models\MessageAttachment;
 use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -153,6 +154,67 @@ test('ai reply sent to customer', function () {
     $resp->assertOk();
 
     Http::assertSentCount(1);
+});
+
+test('ai media reply sends supported media types to customer', function (string $mediaType, string $key, string $expectedUrl) {
+    Http::fake([
+        'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
+    ]);
+
+    putenv('META_WA_TOKEN=meta-token');
+    putenv('META_WA_PHONE_NUMBER_ID=PHONE_ID');
+    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
+    putenv('CLOUDFLARE_R2_URL=https://cdn.example.test');
+    $_ENV['META_WA_TOKEN'] = 'meta-token';
+    $_ENV['META_WA_PHONE_NUMBER_ID'] = 'PHONE_ID';
+    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
+    $_ENV['CLOUDFLARE_R2_URL'] = 'https://cdn.example.test';
+
+    Customer::create(['phone_number' => '628123456789', 'name' => 'Andi']);
+
+    $resp = $this->postJson('/api/webhook/n8n', [
+        'event' => 'message.reply',
+        'customer_phone_number' => '08123456789',
+        'ai_reply' => [
+            'type' => 'media',
+            'media_type' => $mediaType,
+            'key' => $key,
+            'caption' => 'Berikut filenya.',
+        ],
+    ], [
+        'X-N8N-Secret' => 'incoming-secret',
+    ]);
+
+    $resp->assertOk()->assertJson(['success' => true]);
+
+    Http::assertSent(fn ($request) => ($request['type'] ?? null) === $mediaType
+        && (($request[$mediaType]['link'] ?? null) === $expectedUrl)
+        && (($request[$mediaType]['caption'] ?? null) === 'Berikut filenya.'));
+
+    expect(MessageAttachment::query()->where('type', $mediaType)->where('r2_key', $key)->exists())->toBeTrue();
+})->with([
+    'image' => ['image', 'media/2026/05/panduan.jpg', 'https://cdn.example.test/media/2026/05/panduan.jpg'],
+    'document' => ['document', 'media/2026/05/Update Zone B Tangerang 15 Mei 2026.pdf', 'https://cdn.example.test/media/2026/05/Update%20Zone%20B%20Tangerang%2015%20Mei%202026.pdf'],
+    'video' => ['video', 'media/2026/05/panduan.mp4', 'https://cdn.example.test/media/2026/05/panduan.mp4'],
+]);
+
+test('ai media reply rejects unsafe storage key', function () {
+    Customer::create(['phone_number' => '628123456789', 'name' => 'Andi']);
+
+    $resp = $this->postJson('/api/webhook/n8n', [
+        'event' => 'message.reply',
+        'customer_phone_number' => '08123456789',
+        'ai_reply' => [
+            'type' => 'media',
+            'media_type' => 'image',
+            'key' => 'https://evil.example/file.jpg',
+            'caption' => 'x',
+        ],
+    ], [
+        'X-N8N-Secret' => 'incoming-secret',
+    ]);
+
+    $resp->assertStatus(422);
 });
 
 test('reopen from on_progress', function () {

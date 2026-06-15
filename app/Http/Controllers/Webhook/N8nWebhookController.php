@@ -14,9 +14,7 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class N8nWebhookController extends Controller
 {
-    public function __construct(private readonly TicketService $ticketService)
-    {
-    }
+    public function __construct(private readonly TicketService $ticketService) {}
 
     public function handle(Request $request)
     {
@@ -43,9 +41,11 @@ class N8nWebhookController extends Controller
             }
 
             Log::error('n8n.webhook.error', ['message' => $e->getMessage()]);
+
             return response()->json(['success' => false, 'message' => 'Terjadi kesalahan pada server.'], 200);
         } catch (\Throwable $e) {
             Log::error('n8n.webhook.error', ['message' => $e->getMessage()]);
+
             return response()->json(['success' => false, 'message' => 'Terjadi kesalahan pada server.'], 200);
         }
     }
@@ -110,14 +110,21 @@ class N8nWebhookController extends Controller
 
     private function handleMessageReply(Request $request)
     {
+        $aiReply = $request->input('ai_reply');
+        if (is_array($aiReply) && (string) ($aiReply['type'] ?? '') === 'media') {
+            $this->ticketService->sendAiMediaReplyWithoutTicket($request->all());
+
+            return response()->json(['success' => true], 200);
+        }
+
         $customerPhone = PhoneNumber::normalize((string) $request->input('customer_phone_number', ''));
         $aiReply = (string) ($request->input('ai_reply.message', '') ?: $request->input('message.content', '') ?: $request->input('message', ''));
 
         $payload = $request->all();
-        if (!isset($payload['ai_reply']) || !is_array($payload['ai_reply'])) {
+        if (! isset($payload['ai_reply']) || ! is_array($payload['ai_reply'])) {
             $payload['ai_reply'] = [];
         }
-        if (is_array($payload['ai_reply']) && (!isset($payload['ai_reply']['message']) || (string) $payload['ai_reply']['message'] === '')) {
+        if (is_array($payload['ai_reply']) && (! isset($payload['ai_reply']['message']) || (string) $payload['ai_reply']['message'] === '')) {
             $payload['ai_reply']['message'] = $aiReply;
         }
 

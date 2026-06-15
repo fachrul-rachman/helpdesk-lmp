@@ -21,10 +21,8 @@ use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class TicketService
@@ -34,9 +32,7 @@ class TicketService
         private readonly SlaService $slaService,
         private readonly NotificationService $notificationService,
         private readonly TicketTakeoverRequestService $takeoverRequestService,
-    )
-    {
-    }
+    ) {}
 
     /**
      * Buat ticket dari n8n + validasi divisi aktif + queue logic.
@@ -52,7 +48,7 @@ class TicketService
         $this->assertValidPhone($customerPhone);
 
         $ticketData = $payload['ticket'] ?? null;
-        if (!is_array($ticketData)) {
+        if (! is_array($ticketData)) {
             throw new HttpException(422, 'Payload tidak valid: ticket wajib diisi.');
         }
 
@@ -64,7 +60,7 @@ class TicketService
         $aiConfidence = $ticketData['ai_confidence'] ?? null;
         $isFallback = (bool) ($ticketData['is_fallback'] ?? false);
 
-        if ($subject === '' || !in_array($priority, ['low', 'medium', 'high'], true)) {
+        if ($subject === '' || ! in_array($priority, ['low', 'medium', 'high'], true)) {
             throw new HttpException(422, 'Payload tidak valid: subject/priority tidak valid.');
         }
 
@@ -79,15 +75,15 @@ class TicketService
         if ($isFallback) {
             $division = $this->getFallbackDivisionOrFail();
         } else {
-            if (!is_string($divisionId) || $divisionId === '') {
+            if (! is_string($divisionId) || $divisionId === '') {
                 $division = $this->getFallbackDivisionOrFail();
                 $isFallback = true;
             } else {
                 $division = Division::query()->find($divisionId);
-                if (!$division) {
+                if (! $division) {
                     $division = $this->getFallbackDivisionOrFail();
                     $isFallback = true;
-                } elseif (!$division->is_active) {
+                } elseif (! $division->is_active) {
                     $division = $this->getFallbackDivisionOrFail();
                     $isFallback = true;
                 }
@@ -128,7 +124,7 @@ class TicketService
             'queue_priority' => $status === 'queue' ? $this->priorityToQueuePriority($priority) : null,
         ]);
 
-        if ($status === 'new' && !$division->is_fallback) {
+        if ($status === 'new' && ! $division->is_fallback) {
             $this->assignService->autoAssign($ticket);
         }
 
@@ -208,6 +204,7 @@ class TicketService
     public function getTicketDetail(User $user, string $ticketId): array
     {
         $ticket = $this->getTicketForUserOrFail($user, $ticketId);
+
         return $this->formatTicketDetail($ticket);
     }
 
@@ -218,7 +215,7 @@ class TicketService
 
         $fromStatus = (string) $ticket->status;
         $allowed = $this->allowedHumanTransitions($fromStatus);
-        if (!in_array($toStatus, $allowed, true)) {
+        if (! in_array($toStatus, $allowed, true)) {
             throw new HttpException(422, 'Transisi status tidak valid.');
         }
 
@@ -270,7 +267,7 @@ class TicketService
 
             if ($toStatus === 'solved') {
                 $ticket->refresh();
-                if (!$ticket->satisfaction_review_sent_at) {
+                if (! $ticket->satisfaction_review_sent_at) {
                     $this->notificationService->sendSatisfactionReview($ticket);
                     $ticket->satisfaction_review_sent_at = $now;
                     $ticket->save();
@@ -295,7 +292,7 @@ class TicketService
         $ticket = Ticket::query()
             ->with(['customer' => fn ($q) => $q->withTrashed(), 'division', 'assignee' => fn ($q) => $q->withTrashed()])
             ->find($ticketId);
-        if (!$ticket) {
+        if (! $ticket) {
             throw new HttpException(404, 'Ticket tidak ditemukan.');
         }
 
@@ -320,13 +317,13 @@ class TicketService
         $ticket = Ticket::query()
             ->with(['customer' => fn ($q) => $q->withTrashed(), 'division', 'assignee' => fn ($q) => $q->withTrashed()])
             ->find($ticketId);
-        if (!$ticket) {
+        if (! $ticket) {
             throw new HttpException(404, 'Ticket tidak ditemukan.');
         }
 
         /** @var User|null $pic */
         $pic = User::query()->where('role', 'pic')->where('is_active', true)->find($picUserId);
-        if (!$pic || !$pic->division_id) {
+        if (! $pic || ! $pic->division_id) {
             throw new HttpException(422, 'User PIC tidak valid.');
         }
 
@@ -369,13 +366,13 @@ class TicketService
         $ticket = Ticket::query()
             ->with(['customer' => fn ($q) => $q->withTrashed(), 'division', 'assignee' => fn ($q) => $q->withTrashed()])
             ->find($ticketId);
-        if (!$ticket) {
+        if (! $ticket) {
             throw new HttpException(404, 'Ticket tidak ditemukan.');
         }
 
         /** @var Division|null $division */
         $division = Division::query()->find($divisionId);
-        if (!$division || (!$division->is_active && !$division->is_fallback)) {
+        if (! $division || (! $division->is_active && ! $division->is_fallback)) {
             throw new HttpException(422, 'Divisi tidak aktif. Tidak ada PIC yang tersedia.');
         }
 
@@ -396,7 +393,7 @@ class TicketService
                 $shouldBroadcastAssigned = true;
             } elseif (is_string($assignedTo) && $assignedTo !== '') {
                 $pic = User::query()->where('role', 'pic')->where('is_active', true)->find($assignedTo);
-                if (!$pic || (string) $pic->division_id !== (string) $division->id) {
+                if (! $pic || (string) $pic->division_id !== (string) $division->id) {
                     throw new HttpException(422, 'PIC tidak valid untuk divisi tujuan.');
                 }
                 $newAssignee = $pic->id;
@@ -459,7 +456,7 @@ class TicketService
     {
         /** @var Customer|null $customer */
         $customer = Customer::query()->withTrashed()->find($customerId);
-        if (!$customer) {
+        if (! $customer) {
             throw new HttpException(404, 'Customer tidak ditemukan.');
         }
 
@@ -515,6 +512,7 @@ class TicketService
                 if ($at === $bt) {
                     return strcmp((string) $a->id, (string) $b->id);
                 }
+
                 return $at <=> $bt;
             })
             ->values();
@@ -585,7 +583,7 @@ class TicketService
 
             if ($attachments !== []) {
                 foreach ($attachments as $file) {
-                    if (!$file instanceof UploadedFile) {
+                    if (! $file instanceof UploadedFile) {
                         continue;
                     }
 
@@ -631,7 +629,7 @@ class TicketService
                     $sentCaption = false;
                     foreach ($message->attachments as $att) {
                         $caption = '';
-                        if (!$sentCaption && $content !== '') {
+                        if (! $sentCaption && $content !== '') {
                             $caption = $content;
                             $sentCaption = true;
                         }
@@ -666,7 +664,7 @@ class TicketService
 
         /** @var Division|null $division */
         $division = Division::query()->find((string) $payload['division_id']);
-        if (!$division || (!$division->is_active && !$division->is_fallback)) {
+        if (! $division || (! $division->is_active && ! $division->is_fallback)) {
             throw new HttpException(422, 'Divisi tidak aktif. Tidak ada PIC yang tersedia.');
         }
 
@@ -702,7 +700,7 @@ class TicketService
                 'queue_priority' => $status === 'queue' ? $this->priorityToQueuePriority((string) $payload['priority']) : null,
             ]);
 
-            if ($status === 'new' && !$division->is_fallback) {
+            if ($status === 'new' && ! $division->is_fallback) {
                 $assigned = $this->assignService->autoAssign($ticket);
                 if ($assigned) {
                     // AssignService sudah update ticket + broadcast TicketAssigned.
@@ -757,10 +755,10 @@ class TicketService
             ->where('assigned_to', $pic->id)
             ->whereIn('status', ['solved', 'closed']);
 
-        if (!empty($filters['date_from'])) {
+        if (! empty($filters['date_from'])) {
             $query->whereDate('created_at', '>=', (string) $filters['date_from']);
         }
-        if (!empty($filters['date_to'])) {
+        if (! empty($filters['date_to'])) {
             $query->whereDate('created_at', '<=', (string) $filters['date_to']);
         }
 
@@ -795,7 +793,7 @@ class TicketService
 
         /** @var Customer|null $customer */
         $customer = Customer::query()->withTrashed()->find($customerId);
-        if (!$customer) {
+        if (! $customer) {
             throw new HttpException(404, 'Customer tidak ditemukan.');
         }
 
@@ -889,7 +887,7 @@ class TicketService
 
     public function formatCustomer(?Customer $customer): array
     {
-        if (!$customer) {
+        if (! $customer) {
             return [
                 'id' => null,
                 'name' => 'Customer Dihapus',
@@ -968,10 +966,10 @@ class TicketService
             ->with(['message.ticket'])
             ->find($attachmentId);
 
-        if (!$attachment || !$attachment->message || !$attachment->message->ticket_id) {
+        if (! $attachment || ! $attachment->message || ! $attachment->message->ticket_id) {
             // Attachment dari percakapan AI (ticket_id NULL) tetap boleh diakses jika user punya akses
             // ke salah satu ticket milik customer tersebut.
-            if (!$attachment || !$attachment->message) {
+            if (! $attachment || ! $attachment->message) {
                 throw new HttpException(404, 'Attachment tidak ditemukan.');
             }
 
@@ -985,7 +983,7 @@ class TicketService
 
             /** @var Ticket|null $ticket */
             $ticket = $ticketQuery->orderByDesc('created_at')->first();
-            if (!$ticket) {
+            if (! $ticket) {
                 throw new HttpException(403, 'Anda tidak memiliki akses ke halaman ini.');
             }
         }
@@ -1032,7 +1030,7 @@ class TicketService
 
         /** @var Customer|null $customer */
         $customer = Customer::query()->where('phone_number', $customerPhone)->first();
-        if (!$customer) {
+        if (! $customer) {
             throw new HttpException(422, 'Customer tidak ditemukan dan phone_number tidak valid.');
         }
 
@@ -1075,11 +1073,124 @@ class TicketService
         ]));
     }
 
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public function sendAiMediaReplyWithoutTicket(array $payload): Message
+    {
+        $customerPhone = PhoneNumber::normalize((string) ($payload['customer_phone_number'] ?? ''));
+        if ($customerPhone === '') {
+            throw new HttpException(422, 'Payload tidak valid: customer_phone_number wajib diisi.');
+        }
+
+        $aiReply = $payload['ai_reply'] ?? null;
+        if (! is_array($aiReply)) {
+            throw new HttpException(422, 'Payload tidak valid: ai_reply wajib diisi.');
+        }
+
+        $key = trim((string) ($aiReply['key'] ?? ''));
+        $this->assertValidMediaKey($key);
+
+        /** @var Customer|null $customer */
+        $customer = Customer::query()->where('phone_number', $customerPhone)->first();
+        if (! $customer) {
+            throw new HttpException(422, 'Customer tidak ditemukan dan phone_number tidak valid.');
+        }
+
+        $mediaService = app(MediaService::class);
+
+        $mediaType = strtolower(trim((string) ($aiReply['media_type'] ?? '')));
+        if ($mediaType === '') {
+            $mediaType = $mediaService->classifyTypeFromKey($key);
+        }
+        if (! in_array($mediaType, ['image', 'video', 'document'], true)) {
+            throw new HttpException(422, 'media_type tidak valid.');
+        }
+
+        $mimeType = $mediaService->mimeTypeFromKey($key);
+        if ($mimeType !== 'application/octet-stream' && ! in_array($mimeType, $mediaService->allowedMimeTypes(), true)) {
+            throw new HttpException(422, 'Tipe file tidak didukung.');
+        }
+
+        $caption = trim((string) ($aiReply['caption'] ?? $aiReply['message'] ?? ''));
+        if (mb_strlen($caption) > 1024) {
+            throw new HttpException(422, 'Caption maksimal 1024 karakter.');
+        }
+
+        $fileName = trim((string) ($aiReply['filename'] ?? ''));
+        if ($fileName === '') {
+            $fileName = basename(str_replace('\\', '/', $key));
+        }
+        if ($fileName === '' || $fileName === '.' || $fileName === '..') {
+            $fileName = 'file';
+        }
+
+        $mediaUrl = $mediaService->getPublicUrl($key);
+        $this->notificationService->sendMedia(
+            $customer->phone_number,
+            $mediaUrl,
+            $mediaType,
+            $caption,
+            $fileName,
+        );
+
+        $message = DB::transaction(function () use ($customer, $caption, $mediaType, $fileName, $key, $mimeType): Message {
+            $message = Message::create([
+                'ticket_id' => null,
+                'customer_id' => $customer->id,
+                'sender_type' => 'ai',
+                'sender_id' => null,
+                'content' => $caption !== '' ? $caption : null,
+                'wa_message_id' => null,
+                'created_at' => now(),
+            ]);
+
+            MessageAttachment::create([
+                'message_id' => $message->id,
+                'type' => $mediaType,
+                'file_name' => $fileName,
+                'r2_key' => $key,
+                'mime_type' => $mimeType,
+                'size_bytes' => 0,
+            ]);
+
+            return $message->fresh(['attachments', 'sender' => fn ($q) => $q->withTrashed(), 'customer' => fn ($q) => $q->withTrashed()]) ?? $message;
+        });
+
+        /** @var Ticket|null $activeTicket */
+        $activeTicket = Ticket::query()
+            ->where('customer_id', $customer->id)
+            ->whereIn('status', ['new', 'open', 'pending', 'on_progress'])
+            ->orderByDesc('created_at')
+            ->first();
+
+        if ($activeTicket) {
+            $messagePayload = $this->formatMessage($message);
+            $messagePayload['ticket_id'] = $activeTicket->id;
+            event(new MessageSent($messagePayload));
+        }
+
+        event(new AiConversationUpdated([
+            'customer' => [
+                'id' => $customer->id,
+                'name' => $customer->name,
+                'phone_number' => $customer->phone_number,
+            ],
+            'message' => [
+                'sender_type' => 'ai',
+                'content' => $message->content,
+                'created_at' => optional($message->created_at)->toISOString(),
+            ],
+        ]));
+
+        return $message;
+    }
+
     public function reopenFromOnProgress(string $ticketId): Ticket
     {
         /** @var Ticket|null $ticket */
         $ticket = Ticket::query()->find($ticketId);
-        if (!$ticket) {
+        if (! $ticket) {
             throw new HttpException(404, 'Ticket tidak ditemukan.');
         }
 
@@ -1142,7 +1253,7 @@ class TicketService
 
         $ticket->status = 'closed';
         $ticket->closed_at = $now;
-        if (!$ticket->satisfaction_review_sent_at) {
+        if (! $ticket->satisfaction_review_sent_at) {
             $this->notificationService->sendSatisfactionReview($ticket);
             $ticket->satisfaction_review_sent_at = $now;
         }
@@ -1166,9 +1277,10 @@ class TicketService
     {
         /** @var Division|null $division */
         $division = Division::query()->where('is_fallback', true)->first();
-        if (!$division) {
+        if (! $division) {
             throw new HttpException(500, 'Terjadi kesalahan pada server.');
         }
+
         return $division;
     }
 
@@ -1184,37 +1296,37 @@ class TicketService
      */
     private function applyTicketFilters(Builder $query, User $user, array $filters): void
     {
-        if (!empty($filters['has_request']) && $user->role === 'spv') {
+        if (! empty($filters['has_request']) && $user->role === 'spv') {
             $query->whereHas('takeoverRequest', function (Builder $q): void {
                 $q->whereIn('status', ['pending', 'approved']);
             });
         }
 
-        if (!empty($filters['status'])) {
+        if (! empty($filters['status'])) {
             $query->where('status', (string) $filters['status']);
         }
 
-        if (!empty($filters['priority'])) {
+        if (! empty($filters['priority'])) {
             $query->where('priority', (string) $filters['priority']);
         }
 
-        if (!empty($filters['division_id']) && $user->role === 'spv') {
+        if (! empty($filters['division_id']) && $user->role === 'spv') {
             $query->where('division_id', (string) $filters['division_id']);
         }
 
-        if (!empty($filters['assigned_to']) && $user->role === 'spv') {
+        if (! empty($filters['assigned_to']) && $user->role === 'spv') {
             $query->where('assigned_to', (string) $filters['assigned_to']);
         }
 
-        if (!empty($filters['date_from'])) {
+        if (! empty($filters['date_from'])) {
             $query->whereDate('created_at', '>=', (string) $filters['date_from']);
         }
 
-        if (!empty($filters['date_to'])) {
+        if (! empty($filters['date_to'])) {
             $query->whereDate('created_at', '<=', (string) $filters['date_to']);
         }
 
-        if (!empty($filters['search'])) {
+        if (! empty($filters['search'])) {
             $search = (string) $filters['search'];
             $query->where(function (Builder $q) use ($search): void {
                 $q->where('subject', 'like', "%{$search}%")
@@ -1239,7 +1351,7 @@ class TicketService
 
         /** @var Ticket|null $ticket */
         $ticket = $query->find($ticketId);
-        if (!$ticket) {
+        if (! $ticket) {
             throw new HttpException(404, 'Ticket tidak ditemukan.');
         }
 
@@ -1260,6 +1372,7 @@ class TicketService
             if ($takeover && (string) $takeover->status === 'approved' && (string) $takeover->requested_by === (string) $actor->id) {
                 throw new HttpException(403, 'Ticket sedang diambil alih oleh SPV. Anda tidak bisa melakukan aksi.');
             }
+
             return;
         }
 
@@ -1268,14 +1381,15 @@ class TicketService
                 return;
             }
 
-            if (!$ticket->assigned_to) {
+            if (! $ticket->assigned_to) {
                 throw new HttpException(403, 'Anda tidak memiliki akses ke halaman ini.');
             }
 
             $assignee = $ticket->assignee;
-            if (!$assignee || $assignee->role !== 'spv' || (string) $assignee->id !== (string) $actor->id) {
+            if (! $assignee || $assignee->role !== 'spv' || (string) $assignee->id !== (string) $actor->id) {
                 throw new HttpException(403, 'Anda tidak memiliki akses ke halaman ini.');
             }
+
             return;
         }
 
@@ -1310,7 +1424,7 @@ class TicketService
             ->orderBy('created_at')
             ->first();
 
-        if (!$next) {
+        if (! $next) {
             return;
         }
 
@@ -1325,7 +1439,7 @@ class TicketService
             $next->queue_position = null;
             $next->queue_priority = null;
 
-            if ($division && !$division->is_fallback) {
+            if ($division && ! $division->is_fallback) {
                 $assigned = $this->assignService->autoAssign($next);
                 if ($assigned) {
                     // AssignService sudah broadcast TicketAssigned.
@@ -1357,6 +1471,7 @@ class TicketService
     private function getSlaFrDurationMinutes(): int
     {
         $setting = AppSetting::query()->find('sla_fr_duration_minutes');
+
         return max(1, (int) ($setting?->value ?? 5));
     }
 
@@ -1365,6 +1480,30 @@ class TicketService
         $len = strlen($normalized);
         if ($len < 10 || $len > 15) {
             throw new HttpException(422, 'Nomor HP tidak valid.');
+        }
+    }
+
+    private function assertValidMediaKey(string $key): void
+    {
+        if ($key === '') {
+            throw new HttpException(422, 'Payload tidak valid: ai_reply.key wajib diisi.');
+        }
+
+        if (mb_strlen($key) > 1024) {
+            throw new HttpException(422, 'Payload tidak valid: ai_reply.key terlalu panjang.');
+        }
+
+        if (preg_match('/[\x00-\x1F\x7F]/', $key) === 1) {
+            throw new HttpException(422, 'Payload tidak valid: ai_reply.key tidak valid.');
+        }
+
+        $normalized = str_replace('\\', '/', $key);
+        if (str_starts_with($normalized, '/') || str_contains($normalized, '../') || str_contains($normalized, '/..')) {
+            throw new HttpException(422, 'Payload tidak valid: ai_reply.key tidak valid.');
+        }
+
+        if (preg_match('/^[a-z][a-z0-9+.-]*:\/\//i', $key) === 1) {
+            throw new HttpException(422, 'Payload tidak valid: ai_reply.key harus berupa storage key.');
         }
     }
 }
