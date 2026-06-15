@@ -5,8 +5,10 @@ use App\Models\Division;
 use App\Models\MessageAttachment;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\MediaService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 
 uses(RefreshDatabase::class);
 
@@ -16,6 +18,31 @@ beforeEach(function () {
     putenv('N8N_INCOMING_SECRET=incoming-secret');
     $_ENV['N8N_INCOMING_SECRET'] = 'incoming-secret';
 });
+
+function noisyPngBytes(int $size = 1500): string
+{
+    $image = imagecreatetruecolor($size, $size);
+    if (! $image instanceof GdImage) {
+        throw new RuntimeException('GD image creation failed.');
+    }
+
+    for ($y = 0; $y < $size; $y++) {
+        for ($x = 0; $x < $size; $x++) {
+            imagesetpixel($image, $x, $y, mt_rand(0, 0xFFFFFF));
+        }
+    }
+
+    ob_start();
+    imagepng($image, null, 0);
+    $bytes = ob_get_clean();
+    imagedestroy($image);
+
+    if (! is_string($bytes)) {
+        throw new RuntimeException('PNG encoding failed.');
+    }
+
+    return $bytes;
+}
 
 test('invalid n8n secret rejected', function () {
     $this->postJson('/api/webhook/n8n', ['event' => 'message.reply'], [
@@ -270,6 +297,104 @@ test('ai media reply can send image file as document fallback', function () {
 
     Http::assertSent(fn ($request) => ($request['type'] ?? null) === 'document'
         && (($request['document']['filename'] ?? null) === 'sitemap-karawang.png'));
+});
+
+test('ai media reply compresses large image before sending as image', function () {
+    if (! function_exists('imagecreatetruecolor')) {
+        $this->markTestSkipped('GD extension is not available.');
+    }
+
+    Storage::fake('r2');
+    Http::fake([
+        'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
+    ]);
+
+    putenv('META_WA_TOKEN=meta-token');
+    putenv('META_WA_PHONE_NUMBER_ID=PHONE_ID');
+    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
+    putenv('CLOUDFLARE_R2_URL=https://cdn.example.test');
+    $_ENV['META_WA_TOKEN'] = 'meta-token';
+    $_ENV['META_WA_PHONE_NUMBER_ID'] = 'PHONE_ID';
+    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
+    $_ENV['CLOUDFLARE_R2_URL'] = 'https://cdn.example.test';
+
+    $key = 'media/2026/05/large-sitemap.png';
+    $bytes = noisyPngBytes();
+    expect(strlen($bytes))->toBeGreaterThan(MediaService::WHATSAPP_IMAGE_MAX_BYTES);
+    Storage::disk('r2')->put($key, $bytes);
+
+    Customer::create(['phone_number' => '628123456789', 'name' => 'Andi']);
+
+    $resp = $this->postJson('/api/webhook/n8n', [
+        'event' => 'message.reply',
+        'customer_phone_number' => '08123456789',
+        'ai_reply' => [
+            'type' => 'media',
+            'media_type' => 'image',
+            'key' => $key,
+            'caption' => 'Berikut filenya.',
+            'filename' => 'large-sitemap.png',
+        ],
+    ], [
+        'X-N8N-Secret' => 'incoming-secret',
+    ]);
+
+    $resp->assertOk();
+
+    Http::assertSent(fn ($request) => ($request['type'] ?? null) === 'image'
+        && str_contains((string) ($request['image']['link'] ?? ''), '/compressed/')
+        && str_ends_with((string) ($request['image']['link'] ?? ''), '.jpg')
+        && (($request['image']['caption'] ?? null) === 'Berikut filenya.'));
+
+    $attachment = MessageAttachment::query()->where('type', 'image')->firstOrFail();
+    expect($attachment->r2_key)->toContain('/compressed/');
+    expect($attachment->mime_type)->toBe('image/jpeg');
+    Storage::disk('r2')->assertExists($attachment->r2_key);
+    expect(Storage::disk('r2')->size($attachment->r2_key))->toBeLessThanOrEqual(MediaService::WHATSAPP_IMAGE_MAX_BYTES);
+});
+
+test('ai media reply falls back to document when large image cannot be compressed', function () {
+    Storage::fake('r2');
+    Http::fake([
+        'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
+    ]);
+
+    putenv('META_WA_TOKEN=meta-token');
+    putenv('META_WA_PHONE_NUMBER_ID=PHONE_ID');
+    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
+    putenv('CLOUDFLARE_R2_URL=https://cdn.example.test');
+    $_ENV['META_WA_TOKEN'] = 'meta-token';
+    $_ENV['META_WA_PHONE_NUMBER_ID'] = 'PHONE_ID';
+    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
+    $_ENV['CLOUDFLARE_R2_URL'] = 'https://cdn.example.test';
+
+    $key = 'media/2026/05/broken-sitemap.png';
+    Storage::disk('r2')->put($key, str_repeat('x', MediaService::WHATSAPP_IMAGE_MAX_BYTES + 1));
+
+    Customer::create(['phone_number' => '628123456789', 'name' => 'Andi']);
+
+    $resp = $this->postJson('/api/webhook/n8n', [
+        'event' => 'message.reply',
+        'customer_phone_number' => '08123456789',
+        'ai_reply' => [
+            'type' => 'media',
+            'media_type' => 'image',
+            'key' => $key,
+            'caption' => 'Berikut filenya.',
+            'filename' => 'broken-sitemap.png',
+        ],
+    ], [
+        'X-N8N-Secret' => 'incoming-secret',
+    ]);
+
+    $resp->assertOk();
+
+    Http::assertSent(fn ($request) => ($request['type'] ?? null) === 'document'
+        && (($request['document']['filename'] ?? null) === 'broken-sitemap.png')
+        && (($request['document']['caption'] ?? null) === 'Berikut filenya.'));
+
+    $attachment = MessageAttachment::query()->where('type', 'document')->firstOrFail();
+    expect($attachment->r2_key)->toBe($key);
 });
 
 test('reopen from on_progress', function () {

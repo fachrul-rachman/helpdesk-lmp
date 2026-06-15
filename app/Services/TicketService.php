@@ -1129,6 +1129,14 @@ class TicketService
             $fileName = 'file';
         }
 
+        if ($mediaType === 'image') {
+            $prepared = $mediaService->prepareImageForWhatsApp($key, $fileName);
+            $mediaType = $prepared['media_type'];
+            $key = $prepared['key'];
+            $mimeType = $prepared['mime_type'];
+            $fileName = $prepared['file_name'];
+        }
+
         $mediaUrl = $mediaService->getPublicUrl($key);
         $this->notificationService->sendMedia(
             $customer->phone_number,

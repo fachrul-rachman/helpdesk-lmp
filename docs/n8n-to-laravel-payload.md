@@ -98,6 +98,12 @@ Itu salah karena file `.pdf` harus `media_type: "document"`, bukan `image`.
 }
 ```
 
+Jika file gambar lebih besar dari batas WhatsApp image, Laravel akan:
+1. mencoba compress/resize gambar menjadi JPG di bawah 5 MB;
+2. upload hasil compress ke R2;
+3. mengirim hasil compress sebagai `image`;
+4. jika compress gagal, mengirim file asli sebagai `document`.
+
 ## 4. Kirim PDF atau Dokumen
 
 ```json

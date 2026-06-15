@@ -6,12 +6,15 @@ use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\File;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class MediaService
 {
+    public const WHATSAPP_IMAGE_MAX_BYTES = 5_242_880;
+
     /**
      * @return array<int, string>
      */
@@ -53,6 +56,60 @@ class MediaService
     public function mimeTypeFromKey(string $key): string
     {
         return $this->guessMimeFromExtension(pathinfo($key, PATHINFO_EXTENSION)) ?? 'application/octet-stream';
+    }
+
+    /**
+     * @return array{media_type:string,key:string,mime_type:string,file_name:string,compressed:bool,fallback_reason:?string}
+     */
+    public function prepareImageForWhatsApp(string $key, string $fileName): array
+    {
+        $fileName = $this->safeFileName($fileName !== '' ? $fileName : basename(str_replace('\\', '/', $key)));
+        $mimeType = $this->mimeTypeFromKey($key);
+
+        try {
+            $size = (int) Storage::disk('r2')->size($key);
+        } catch (\Throwable $e) {
+            Log::warning('media.image.size_failed', ['key' => $key, 'error' => $e->getMessage()]);
+
+            return [
+                'media_type' => 'image',
+                'key' => $key,
+                'mime_type' => $mimeType,
+                'file_name' => $fileName,
+                'compressed' => false,
+                'fallback_reason' => null,
+            ];
+        }
+
+        if ($size <= self::WHATSAPP_IMAGE_MAX_BYTES) {
+            return [
+                'media_type' => 'image',
+                'key' => $key,
+                'mime_type' => $mimeType,
+                'file_name' => $fileName,
+                'compressed' => false,
+                'fallback_reason' => null,
+            ];
+        }
+
+        $compressed = $this->compressImageForWhatsApp($key, $fileName);
+        if ($compressed) {
+            return $compressed;
+        }
+
+        Log::warning('media.image.fallback_document', [
+            'key' => $key,
+            'size_bytes' => $size,
+        ]);
+
+        return [
+            'media_type' => 'document',
+            'key' => $key,
+            'mime_type' => $mimeType,
+            'file_name' => $fileName,
+            'compressed' => false,
+            'fallback_reason' => 'image_too_large_compress_failed',
+        ];
     }
 
     public function downloadFromMeta(string $mediaId): array
@@ -178,6 +235,127 @@ class MediaService
     public function delete(string $r2Key): void
     {
         Storage::disk('r2')->delete($r2Key);
+    }
+
+    /**
+     * @return array{media_type:string,key:string,mime_type:string,file_name:string,compressed:bool,fallback_reason:?string}|null
+     */
+    private function compressImageForWhatsApp(string $key, string $fileName): ?array
+    {
+        if (! function_exists('imagecreatefromstring')) {
+            Log::warning('media.image.compress_unavailable', ['key' => $key, 'driver' => 'gd']);
+
+            return null;
+        }
+
+        try {
+            $contents = Storage::disk('r2')->get($key);
+        } catch (\Throwable $e) {
+            Log::warning('media.image.read_failed', ['key' => $key, 'error' => $e->getMessage()]);
+
+            return null;
+        }
+
+        if (! is_string($contents) || $contents === '') {
+            Log::warning('media.image.read_empty', ['key' => $key]);
+
+            return null;
+        }
+
+        $source = @imagecreatefromstring($contents);
+        if (! $source instanceof \GdImage) {
+            Log::warning('media.image.decode_failed', ['key' => $key]);
+
+            return null;
+        }
+
+        try {
+            $compressed = $this->encodeCompressedJpeg($source);
+        } finally {
+            imagedestroy($source);
+        }
+
+        if (! $compressed) {
+            Log::warning('media.image.compress_failed', ['key' => $key]);
+
+            return null;
+        }
+
+        $year = now()->format('Y');
+        $month = now()->format('m');
+        $compressedKey = "media/{$year}/{$month}/compressed/".Str::uuid()->toString().'.jpg';
+        Storage::disk('r2')->put($compressedKey, $compressed);
+
+        Log::info('media.image.compressed', [
+            'original_key' => $key,
+            'compressed_key' => $compressedKey,
+            'compressed_size_bytes' => strlen($compressed),
+        ]);
+
+        return [
+            'media_type' => 'image',
+            'key' => $compressedKey,
+            'mime_type' => 'image/jpeg',
+            'file_name' => $this->replaceExtension($fileName, 'jpg'),
+            'compressed' => true,
+            'fallback_reason' => null,
+        ];
+    }
+
+    private function encodeCompressedJpeg(\GdImage $source): ?string
+    {
+        $sourceWidth = imagesx($source);
+        $sourceHeight = imagesy($source);
+        $maxDimensions = [1600, 1280, 1024, 768];
+        $qualities = [82, 74, 66, 58, 50];
+
+        foreach ($maxDimensions as $maxDimension) {
+            $ratio = min(1, $maxDimension / max($sourceWidth, $sourceHeight));
+            $targetWidth = max(1, (int) floor($sourceWidth * $ratio));
+            $targetHeight = max(1, (int) floor($sourceHeight * $ratio));
+
+            $canvas = imagecreatetruecolor($targetWidth, $targetHeight);
+            if (! $canvas instanceof \GdImage) {
+                continue;
+            }
+
+            $white = imagecolorallocate($canvas, 255, 255, 255);
+            imagefilledrectangle($canvas, 0, 0, $targetWidth, $targetHeight, $white);
+            imagecopyresampled($canvas, $source, 0, 0, 0, 0, $targetWidth, $targetHeight, $sourceWidth, $sourceHeight);
+
+            foreach ($qualities as $quality) {
+                ob_start();
+                imagejpeg($canvas, null, $quality);
+                $encoded = ob_get_clean();
+
+                if (is_string($encoded) && $encoded !== '' && strlen($encoded) <= self::WHATSAPP_IMAGE_MAX_BYTES) {
+                    imagedestroy($canvas);
+
+                    return $encoded;
+                }
+            }
+
+            imagedestroy($canvas);
+        }
+
+        return null;
+    }
+
+    private function replaceExtension(string $fileName, string $extension): string
+    {
+        $base = pathinfo($this->safeFileName($fileName), PATHINFO_FILENAME);
+        if ($base === '') {
+            $base = 'file';
+        }
+
+        return "{$base}.{$extension}";
+    }
+
+    private function safeFileName(string $fileName): string
+    {
+        $fileName = basename(str_replace('\\', '/', trim($fileName)));
+
+        return ($fileName !== '' && $fileName !== '.' && $fileName !== '..') ? $fileName : 'file';
     }
 
     private function metaHttp(string $token): PendingRequest
