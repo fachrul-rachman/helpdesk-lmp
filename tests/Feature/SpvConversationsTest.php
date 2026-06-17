@@ -13,7 +13,7 @@ uses(RefreshDatabase::class);
 
 function scAuth(User $user): array
 {
-    return ['Authorization' => 'Bearer ' . JWTAuth::fromUser($user)];
+    return ['Authorization' => 'Bearer '.JWTAuth::fromUser($user)];
 }
 
 test('GET /api/spv/conversations mengembalikan list percakapan dengan last_message dan active_ticket', function () {
@@ -139,4 +139,66 @@ test('filter has_ticket bekerja', function () {
     $this->getJson('/api/spv/conversations?has_ticket=false', scAuth($spv))
         ->assertOk()
         ->assertJsonPath('meta.total', 1);
+});
+
+test('GET /api/spv/customers/{id}/conversation mengembalikan timeline dan ticket customer', function () {
+    $spv = User::factory()->create(['role' => 'spv', 'division_id' => null, 'is_active' => true]);
+    $pic = User::factory()->create(['role' => 'pic', 'is_active' => true]);
+
+    $division = Division::create([
+        'name' => 'Teknis',
+        'description' => 'Desc',
+        'handles' => 'Handles',
+        'not_handles' => 'Not',
+        'ticket_examples' => 'Examples',
+        'sla_resolution_value' => 3,
+        'sla_resolution_unit' => 'days',
+        'sla_resolution_reminder_value' => 12,
+        'sla_resolution_reminder_unit' => 'hours',
+        'is_fallback' => false,
+        'is_active' => true,
+    ]);
+
+    $customer = Customer::create(['phone_number' => '6281111111111', 'name' => 'Andi']);
+
+    $ticket = Ticket::create([
+        'customer_id' => $customer->id,
+        'division_id' => $division->id,
+        'assigned_to' => $pic->id,
+        'created_by' => 'ai',
+        'priority' => 'high',
+        'status' => 'open',
+        'subject' => 'Tiket aktif',
+        'sla_fr_status' => 'done',
+        'sla_resolution_status' => 'running',
+    ]);
+
+    Message::create([
+        'ticket_id' => null,
+        'customer_id' => $customer->id,
+        'sender_type' => 'ai',
+        'sender_id' => null,
+        'content' => 'Halo dari AI',
+        'wa_message_id' => 'wa-ai',
+        'created_at' => now()->subMinutes(2),
+    ]);
+
+    Message::create([
+        'ticket_id' => $ticket->id,
+        'customer_id' => $customer->id,
+        'sender_type' => 'pic',
+        'sender_id' => $pic->id,
+        'content' => 'Kami bantu cek.',
+        'wa_message_id' => null,
+        'created_at' => now()->subMinute(),
+    ]);
+
+    $resp = $this->getJson("/api/spv/customers/{$customer->id}/conversation", scAuth($spv));
+
+    $resp->assertOk()
+        ->assertJsonPath('data.customer.id', $customer->id)
+        ->assertJsonPath('data.active_ticket.id', $ticket->id)
+        ->assertJsonPath('data.messages.0.content', 'Halo dari AI')
+        ->assertJsonPath('data.messages.1.ticket.id', $ticket->id)
+        ->assertJsonPath('data.tickets.0.id', $ticket->id);
 });

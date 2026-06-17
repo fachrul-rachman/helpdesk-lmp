@@ -3,23 +3,22 @@
 use App\Http\Controllers\Admin\AuditLogController;
 use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\DivisionController;
+use App\Http\Controllers\Admin\MetaWhatsappTemplateController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\UserPasswordController;
-use App\Http\Controllers\Admin\MetaWhatsappTemplateController;
+use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\Auth\AuthController;
-use App\Http\Controllers\DivisionController as PublicDivisionController;
-use App\Http\Controllers\Pic\TicketController as PicTicketController;
 use App\Http\Controllers\Pic\TakeoverRequestController as PicTakeoverRequestController;
+use App\Http\Controllers\Pic\TicketController as PicTicketController;
 use App\Http\Controllers\Spv\AnalyticsController;
 use App\Http\Controllers\Spv\ConversationController;
-use App\Http\Controllers\Spv\TicketController as SpvTicketController;
 use App\Http\Controllers\Spv\PicLookupController;
 use App\Http\Controllers\Spv\TakeoverRequestController as SpvTakeoverRequestController;
-use App\Http\Controllers\AttachmentController;
+use App\Http\Controllers\Spv\TicketController as SpvTicketController;
 use App\Http\Controllers\TicketController;
-use App\Http\Controllers\Webhook\WhatsAppWebhookController;
 use App\Http\Controllers\Webhook\N8nWebhookController;
+use App\Http\Controllers\Webhook\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('auth')->group(function (): void {
@@ -84,6 +83,7 @@ Route::middleware(['auth.jwt'])->group(function (): void {
         Route::get('customers/{id}/tickets', [SpvTicketController::class, 'customerTickets']);
         Route::get('analytics', AnalyticsController::class);
         Route::get('conversations', ConversationController::class);
+        Route::get('customers/{id}/conversation', [ConversationController::class, 'show']);
         Route::get('pics', PicLookupController::class);
 
         Route::post('tickets/{id}/takeover-request/approve', [SpvTakeoverRequestController::class, 'approve']);

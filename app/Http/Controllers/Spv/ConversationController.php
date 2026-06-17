@@ -9,14 +9,12 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class ConversationController extends Controller
 {
-    public function __construct(private readonly DashboardService $dashboardService)
-    {
-    }
+    public function __construct(private readonly DashboardService $dashboardService) {}
 
     public function __invoke(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             throw new HttpException(401, 'Token tidak valid.');
         }
 
@@ -31,5 +29,20 @@ class ConversationController extends Controller
 
         return response()->json($this->dashboardService->spvConversations($validated));
     }
-}
 
+    public function show(Request $request, string $id)
+    {
+        $user = $request->user();
+        if (! $user) {
+            throw new HttpException(401, 'Token tidak valid.');
+        }
+
+        $validated = $request->validate([
+            'limit' => ['nullable', 'integer', 'min:1', 'max:500'],
+        ]);
+
+        return response()->json([
+            'data' => $this->dashboardService->spvConversationDetail($id, $validated),
+        ]);
+    }
+}

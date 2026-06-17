@@ -9,12 +9,12 @@ use App\Models\Ticket;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class DashboardService
 {
-    public function __construct(private readonly SlaService $slaService)
-    {
-    }
+    public function __construct(private readonly SlaService $slaService) {}
 
     /**
      * @return array<string, mixed>
@@ -45,6 +45,7 @@ class DashboardService
 
         $ticketsPerDivision = array_map(function (array $row) use ($divisionNames) {
             $id = (string) ($row['division_id'] ?? '');
+
             return [
                 'division_id' => $id,
                 'division_name' => $divisionNames[$id] ?? '-',
@@ -65,7 +66,7 @@ class DashboardService
                 foreach ($tickets as $ticket) {
                     $start = $ticket->sla_fr_started_at ? CarbonImmutable::parse($ticket->sla_fr_started_at) : null;
                     $end = $ticket->sla_fr_completed_at ? CarbonImmutable::parse($ticket->sla_fr_completed_at) : null;
-                    if (!$start || !$end) {
+                    if (! $start || ! $end) {
                         continue;
                     }
 
@@ -74,7 +75,7 @@ class DashboardService
                     $overallMinutes += $mins;
                     $overallCount += 1;
 
-                    if (!isset($perDivTotals[$divisionId])) {
+                    if (! isset($perDivTotals[$divisionId])) {
                         $perDivTotals[$divisionId] = ['minutes' => 0, 'count' => 0];
                     }
                     $perDivTotals[$divisionId]['minutes'] += $mins;
@@ -117,7 +118,7 @@ class DashboardService
 
         $query = Customer::query()->withTrashed();
 
-        if (!empty($filters['search'])) {
+        if (! empty($filters['search'])) {
             $search = (string) $filters['search'];
             $query->where(function (Builder $q) use ($search): void {
                 $q->where('name', 'like', "%{$search}%")
@@ -135,8 +136,8 @@ class DashboardService
         }
 
         // Filter berdasarkan last message date range (dari messages table).
-        $dateFrom = !empty($filters['date_from']) ? (string) $filters['date_from'] : null;
-        $dateTo = !empty($filters['date_to']) ? (string) $filters['date_to'] : null;
+        $dateFrom = ! empty($filters['date_from']) ? (string) $filters['date_from'] : null;
+        $dateTo = ! empty($filters['date_to']) ? (string) $filters['date_to'] : null;
         if ($dateFrom || $dateTo) {
             $query->whereHas('messages', function (Builder $mq) use ($dateFrom, $dateTo): void {
                 if ($dateFrom) {
@@ -203,6 +204,129 @@ class DashboardService
                 'page' => (int) $paginator->currentPage(),
                 'per_page' => (int) $paginator->perPage(),
             ],
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filters
+     * @return array<string, mixed>
+     */
+    public function spvConversationDetail(string $customerId, array $filters): array
+    {
+        /** @var Customer|null $customer */
+        $customer = Customer::query()->withTrashed()->find($customerId);
+        if (! $customer) {
+            throw new HttpException(404, 'Customer tidak ditemukan.');
+        }
+
+        $limit = max(1, min(500, (int) ($filters['limit'] ?? 200)));
+
+        /** @var Collection<int, Message> $messages */
+        $messages = Message::query()
+            ->where('customer_id', $customer->id)
+            ->with([
+                'attachments',
+                'sender' => fn ($q) => $q->withTrashed(),
+                'customer' => fn ($q) => $q->withTrashed(),
+                'ticket.division',
+                'ticket.assignee' => fn ($q) => $q->withTrashed(),
+            ])
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get()
+            ->sort(function (Message $a, Message $b): int {
+                $at = optional($a->created_at)->getTimestamp() ?? 0;
+                $bt = optional($b->created_at)->getTimestamp() ?? 0;
+                if ($at === $bt) {
+                    return strcmp((string) $a->id, (string) $b->id);
+                }
+
+                return $at <=> $bt;
+            })
+            ->values();
+
+        /** @var Collection<int, Ticket> $tickets */
+        $tickets = Ticket::query()
+            ->where('customer_id', $customer->id)
+            ->with(['customer' => fn ($q) => $q->withTrashed(), 'division', 'assignee' => fn ($q) => $q->withTrashed(), 'takeoverRequest'])
+            ->orderByRaw("CASE WHEN status IN ('new', 'open', 'pending', 'on_progress') THEN 0 WHEN status = 'queue' THEN 1 ELSE 2 END")
+            ->orderByDesc('created_at')
+            ->get();
+
+        $activeTicket = $tickets->first(
+            fn (Ticket $ticket): bool => in_array((string) $ticket->status, ['new', 'open', 'pending', 'on_progress'], true)
+        );
+
+        return [
+            'customer' => $this->formatConversationCustomer($customer),
+            'messages' => $messages->map(fn (Message $message) => $this->formatConversationMessage($message))->all(),
+            'tickets' => $tickets->map(fn (Ticket $ticket) => $this->formatConversationTicket($ticket))->all(),
+            'active_ticket' => $activeTicket ? $this->formatConversationTicket($activeTicket) : null,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatConversationCustomer(Customer $customer): array
+    {
+        if (method_exists($customer, 'trashed') && $customer->trashed()) {
+            return [
+                'id' => $customer->id,
+                'name' => 'Customer Dihapus',
+                'phone_number' => null,
+                'notes' => null,
+                'deleted' => true,
+            ];
+        }
+
+        return [
+            'id' => $customer->id,
+            'name' => $customer->name,
+            'phone_number' => $customer->phone_number,
+            'notes' => $customer->notes,
+            'deleted' => false,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatConversationMessage(Message $message): array
+    {
+        $formatted = app(TicketService::class)->formatMessage($message);
+        $ticket = $message->ticket;
+
+        $formatted['ticket'] = $ticket ? $this->formatConversationTicket($ticket) : null;
+
+        return $formatted;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function formatConversationTicket(Ticket $ticket): array
+    {
+        $ticket->loadMissing(['division', 'assignee' => fn ($q) => $q->withTrashed(), 'takeoverRequest']);
+
+        $hasTakeover = $ticket->takeoverRequest
+            && in_array((string) $ticket->takeoverRequest->status, ['pending', 'approved'], true);
+
+        return [
+            'id' => $ticket->id,
+            'ticket_number' => $ticket->ticket_number,
+            'subject' => $ticket->subject,
+            'status' => $ticket->status,
+            'priority' => $ticket->priority,
+            'has_takeover_request' => $hasTakeover,
+            'takeover_request_status' => $hasTakeover ? (string) $ticket->takeoverRequest->status : null,
+            'division' => $ticket->division ? ['id' => $ticket->division->id, 'name' => $ticket->division->name] : null,
+            'assigned_to' => $ticket->assignee ? ['id' => $ticket->assignee->id, 'name' => $ticket->assignee->name] : null,
+            'sla_fr_status' => $ticket->sla_fr_status,
+            'sla_resolution_status' => $ticket->sla_resolution_status,
+            'sla_resolution_deadline_at' => optional($ticket->sla_resolution_deadline_at)->toISOString(),
+            'created_at' => optional($ticket->created_at)->toISOString(),
         ];
     }
 }
