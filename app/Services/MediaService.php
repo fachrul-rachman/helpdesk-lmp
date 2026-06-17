@@ -65,21 +65,7 @@ class MediaService
     {
         $fileName = $this->safeFileName($fileName !== '' ? $fileName : basename(str_replace('\\', '/', $key)));
         $mimeType = $this->mimeTypeFromKey($key);
-
-        try {
-            $size = (int) Storage::disk('r2')->size($key);
-        } catch (\Throwable $e) {
-            Log::warning('media.image.size_failed', ['key' => $key, 'error' => $e->getMessage()]);
-
-            return [
-                'media_type' => 'image',
-                'key' => $key,
-                'mime_type' => $mimeType,
-                'file_name' => $fileName,
-                'compressed' => false,
-                'fallback_reason' => null,
-            ];
-        }
+        $size = $this->storageObjectSizeOrFail($key);
 
         if ($size <= self::WHATSAPP_IMAGE_MAX_BYTES) {
             return [
@@ -110,6 +96,17 @@ class MediaService
             'compressed' => false,
             'fallback_reason' => 'image_too_large_compress_failed',
         ];
+    }
+
+    public function storageObjectSizeOrFail(string $key): int
+    {
+        try {
+            return (int) Storage::disk('r2')->size($key);
+        } catch (\Throwable $e) {
+            Log::warning('media.storage.size_failed', ['key' => $key, 'error' => $e->getMessage()]);
+
+            throw new HttpException(422, 'File media tidak ditemukan di storage.');
+        }
     }
 
     public function downloadFromMeta(string $mediaId): array

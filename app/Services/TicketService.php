@@ -1135,6 +1135,8 @@ class TicketService
             $key = $prepared['key'];
             $mimeType = $prepared['mime_type'];
             $fileName = $prepared['file_name'];
+        } else {
+            $mediaService->storageObjectSizeOrFail($key);
         }
 
         $mediaUrl = $mediaService->getPublicUrl($key);

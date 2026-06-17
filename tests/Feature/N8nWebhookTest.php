@@ -184,6 +184,7 @@ test('ai reply sent to customer', function () {
 });
 
 test('ai media reply sends supported media types to customer', function (string $mediaType, string $key, string $expectedUrl) {
+    Storage::fake('r2');
     Http::fake([
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
     ]);
@@ -197,6 +198,7 @@ test('ai media reply sends supported media types to customer', function (string 
     $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
     $_ENV['CLOUDFLARE_R2_URL'] = 'https://cdn.example.test';
 
+    Storage::disk('r2')->put($key, 'file');
     Customer::create(['phone_number' => '628123456789', 'name' => 'Andi']);
 
     $resp = $this->postJson('/api/webhook/n8n', [
@@ -264,6 +266,7 @@ test('ai media reply rejects media type that does not match file extension', fun
 });
 
 test('ai media reply can send image file as document fallback', function () {
+    Storage::fake('r2');
     Http::fake([
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
     ]);
@@ -277,6 +280,7 @@ test('ai media reply can send image file as document fallback', function () {
     $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
     $_ENV['CLOUDFLARE_R2_URL'] = 'https://cdn.example.test';
 
+    Storage::disk('r2')->put('media/2026/05/sitemap-karawang.png', 'file');
     Customer::create(['phone_number' => '628123456789', 'name' => 'Andi']);
 
     $resp = $this->postJson('/api/webhook/n8n', [
@@ -395,6 +399,41 @@ test('ai media reply falls back to document when large image cannot be compresse
 
     $attachment = MessageAttachment::query()->where('type', 'document')->firstOrFail();
     expect($attachment->r2_key)->toBe($key);
+});
+
+test('ai media reply rejects missing storage key before sending to meta', function () {
+    Storage::fake('r2');
+    Http::fake([
+        'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
+    ]);
+
+    putenv('META_WA_TOKEN=meta-token');
+    putenv('META_WA_PHONE_NUMBER_ID=PHONE_ID');
+    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
+    putenv('CLOUDFLARE_R2_URL=https://cdn.example.test');
+    $_ENV['META_WA_TOKEN'] = 'meta-token';
+    $_ENV['META_WA_PHONE_NUMBER_ID'] = 'PHONE_ID';
+    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
+    $_ENV['CLOUDFLARE_R2_URL'] = 'https://cdn.example.test';
+
+    Customer::create(['phone_number' => '628123456789', 'name' => 'Andi']);
+
+    $resp = $this->postJson('/api/webhook/n8n', [
+        'event' => 'message.reply',
+        'customer_phone_number' => '08123456789',
+        'ai_reply' => [
+            'type' => 'media',
+            'media_type' => 'image',
+            'key' => 'media/2026/05/missing.jpg',
+            'caption' => 'Berikut filenya.',
+        ],
+    ], [
+        'X-N8N-Secret' => 'incoming-secret',
+    ]);
+
+    $resp->assertStatus(422);
+
+    Http::assertNothingSent();
 });
 
 test('reopen from on_progress', function () {
