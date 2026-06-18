@@ -64,6 +64,21 @@ test('deadline calculated within working hours', function () {
     expect($deadline->format('Y-m-d H:i'))->toBe('2026-01-05 09:05');
 });
 
+test('deadline uses Jakarta working hours when application timestamps are UTC', function () {
+    $division = slaDivision();
+    seedWorkingHours($division->id);
+
+    $service = app(SlaService::class);
+
+    // 04:33 UTC is 11:33 in Jakarta and must be treated as inside working hours.
+    $start = CarbonImmutable::parse('2026-06-18 04:33:00', 'UTC');
+    $deadline = $service->calculateDeadline($start, 5, $division->id);
+
+    expect($deadline->getTimezone()->getName())->toBe('UTC')
+        ->and($deadline->format('Y-m-d H:i'))->toBe('2026-06-18 04:38')
+        ->and($deadline->timezone('Asia/Jakarta')->format('Y-m-d H:i'))->toBe('2026-06-18 11:38');
+});
+
 test('deadline skips non working hours', function () {
     $division = slaDivision();
     seedWorkingHours($division->id);
@@ -117,6 +132,19 @@ test('elapsed working minutes calculation', function () {
 
     $elapsed = $service->calculateElapsedWorkingMinutes($start, $end, $division->id);
     expect($elapsed)->toBe(120);
+});
+
+test('elapsed working minutes use Jakarta working hours for UTC timestamps', function () {
+    $division = slaDivision();
+    seedWorkingHours($division->id);
+
+    $service = app(SlaService::class);
+
+    // Friday 16:00 WIB until Monday 09:00 WIB spans two working hours.
+    $start = CarbonImmutable::parse('2026-01-02 09:00:00', 'UTC');
+    $end = CarbonImmutable::parse('2026-01-05 02:00:00', 'UTC');
+
+    expect($service->calculateElapsedWorkingMinutes($start, $end, $division->id))->toBe(120);
 });
 
 test('pause adds correct duration to deadline', function () {
