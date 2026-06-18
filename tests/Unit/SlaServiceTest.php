@@ -147,6 +147,25 @@ test('elapsed working minutes use Jakarta working hours for UTC timestamps', fun
     expect($service->calculateElapsedWorkingMinutes($start, $end, $division->id))->toBe(120);
 });
 
+test('elapsed working minutes handle partial minutes without deprecation', function () {
+    $division = slaDivision();
+    seedWorkingHours($division->id);
+
+    $service = app(SlaService::class);
+    $start = CarbonImmutable::parse('2026-06-18 04:33:35', 'UTC');
+    $end = CarbonImmutable::parse('2026-06-18 06:50:30', 'UTC');
+
+    set_error_handler(function (int $severity, string $message): never {
+        throw new ErrorException($message, 0, $severity);
+    }, E_DEPRECATED);
+
+    try {
+        expect($service->calculateElapsedWorkingMinutes($start, $end, $division->id))->toBe(136);
+    } finally {
+        restore_error_handler();
+    }
+});
+
 test('pause adds correct duration to deadline', function () {
     $division = slaDivision(['sla_resolution_value' => 2, 'sla_resolution_unit' => 'hours']);
     seedWorkingHours($division->id);
