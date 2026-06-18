@@ -22,7 +22,9 @@ class SlaService
             return $startAt->addMinutes($durationMinutes);
         }
 
-        $cursor = $this->alignToWorkingMinute($startAt, $divisionId);
+        $originalTimezone = $startAt->getTimezone();
+        $businessStart = $startAt->setTimezone($this->businessTimezone());
+        $cursor = $this->alignToWorkingMinute($businessStart, $divisionId);
         $remaining = $durationMinutes;
 
         while ($remaining > 0) {
@@ -54,7 +56,7 @@ class SlaService
             }
         }
 
-        return $cursor;
+        return $cursor->setTimezone($originalTimezone);
     }
 
     public function calculateElapsedWorkingMinutes(CarbonImmutable $startAt, CarbonImmutable $endAt, string $divisionId): int
@@ -66,6 +68,10 @@ class SlaService
         if (!$this->hasWorkingHours($divisionId)) {
             return $startAt->diffInMinutes($endAt);
         }
+
+        $businessTimezone = $this->businessTimezone();
+        $startAt = $startAt->setTimezone($businessTimezone);
+        $endAt = $endAt->setTimezone($businessTimezone);
 
         $total = 0;
         $cursor = $startAt;
@@ -260,5 +266,10 @@ class SlaService
             ->where('division_id', $divisionId)
             ->where('is_active', true)
             ->exists();
+    }
+
+    private function businessTimezone(): string
+    {
+        return (string) config('app.business_timezone', 'Asia/Jakarta');
     }
 }

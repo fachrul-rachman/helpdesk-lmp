@@ -58,7 +58,7 @@ test('deadline calculated within working hours', function () {
 
     $service = app(SlaService::class);
 
-    $start = CarbonImmutable::parse('2026-01-05 09:00:00');
+    $start = CarbonImmutable::parse('2026-01-05 09:00:00', 'Asia/Jakarta');
     $deadline = $service->calculateDeadline($start, 5, $division->id);
 
     expect($deadline->format('Y-m-d H:i'))->toBe('2026-01-05 09:05');
@@ -85,7 +85,7 @@ test('deadline skips non working hours', function () {
 
     $service = app(SlaService::class);
 
-    $start = CarbonImmutable::parse('2026-01-05 18:00:00');
+    $start = CarbonImmutable::parse('2026-01-05 18:00:00', 'Asia/Jakarta');
     $deadline = $service->calculateDeadline($start, 5, $division->id);
 
     expect($deadline->format('Y-m-d H:i'))->toBe('2026-01-06 08:05');
@@ -97,7 +97,7 @@ test('deadline skips weekend', function () {
 
     $service = app(SlaService::class);
 
-    $start = CarbonImmutable::parse('2026-01-02 16:58:00'); // Friday
+    $start = CarbonImmutable::parse('2026-01-02 16:58:00', 'Asia/Jakarta'); // Friday
     $deadline = $service->calculateDeadline($start, 5, $division->id);
 
     expect($deadline->format('Y-m-d H:i'))->toBe('2026-01-05 08:03'); // Monday
@@ -115,7 +115,7 @@ test('deadline skips public holiday', function () {
 
     $service = app(SlaService::class);
 
-    $start = CarbonImmutable::parse('2026-01-01 16:58:00'); // Thursday
+    $start = CarbonImmutable::parse('2026-01-01 16:58:00', 'Asia/Jakarta'); // Thursday
     $deadline = $service->calculateDeadline($start, 5, $division->id);
 
     expect($deadline->format('Y-m-d H:i'))->toBe('2026-01-05 08:03'); // Friday holiday -> Monday
@@ -127,8 +127,8 @@ test('elapsed working minutes calculation', function () {
 
     $service = app(SlaService::class);
 
-    $start = CarbonImmutable::parse('2026-01-02 16:00:00'); // Friday
-    $end = CarbonImmutable::parse('2026-01-05 09:00:00'); // Monday
+    $start = CarbonImmutable::parse('2026-01-02 16:00:00', 'Asia/Jakarta'); // Friday
+    $end = CarbonImmutable::parse('2026-01-05 09:00:00', 'Asia/Jakarta'); // Monday
 
     $elapsed = $service->calculateElapsedWorkingMinutes($start, $end, $division->id);
     expect($elapsed)->toBe(120);
@@ -153,7 +153,7 @@ test('pause adds correct duration to deadline', function () {
 
     $service = app(SlaService::class);
 
-    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-01-05 09:00:00'));
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-01-05 02:00:00', 'UTC')); // 09:00 WIB
 
     $customer = Customer::create(['phone_number' => '6285550000000', 'name' => 'Andi']);
 
@@ -171,13 +171,13 @@ test('pause adds correct duration to deadline', function () {
         'sla_resolution_status' => 'running',
     ]);
 
-    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-01-05 09:30:00'));
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-01-05 02:30:00', 'UTC')); // 09:30 WIB
     $service->pauseSla($ticket->id, 'pending');
 
-    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-01-05 10:30:00'));
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-01-05 03:30:00', 'UTC')); // 10:30 WIB
     $service->resumeSla($ticket->id);
 
     $ticket->refresh();
     expect((int) $ticket->sla_resolution_paused_duration)->toBe(3600);
-    expect(CarbonImmutable::parse($ticket->sla_resolution_deadline_at)->format('H:i'))->toBe('12:00');
+    expect(CarbonImmutable::parse($ticket->sla_resolution_deadline_at)->timezone('Asia/Jakarta')->format('H:i'))->toBe('12:00');
 });

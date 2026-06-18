@@ -69,6 +69,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Business Timezone
+    |--------------------------------------------------------------------------
+    |
+    | Application timestamps remain in UTC. Working hours, public holidays,
+    | and SLA calculations use this timezone before being converted back to
+    | the timezone of the original timestamp.
+    |
+    */
+
+    'business_timezone' => env('BUSINESS_TIMEZONE', 'Asia/Jakarta'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Locale Configuration
     |--------------------------------------------------------------------------
     |
