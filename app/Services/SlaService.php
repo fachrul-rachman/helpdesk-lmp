@@ -73,7 +73,7 @@ class SlaService
         $startAt = $startAt->setTimezone($businessTimezone);
         $endAt = $endAt->setTimezone($businessTimezone);
 
-        $total = 0;
+        $totalMinutes = 0.0;
         $cursor = $startAt;
 
         while ($cursor->toDateString() <= $endAt->toDateString()) {
@@ -90,13 +90,13 @@ class SlaService
             $rangeEnd = $endAt->lessThan($dayEnd) ? $endAt : $dayEnd;
 
             if ($rangeEnd->greaterThan($rangeStart)) {
-                $total += $rangeStart->diffInMinutes($rangeEnd);
+                $totalMinutes += $rangeStart->diffInMinutes($rangeEnd);
             }
 
             $cursor = $cursor->addDay()->startOfDay();
         }
 
-        return $total;
+        return (int) floor($totalMinutes);
     }
 
     public function pauseSla(string $ticketId, string $reason): void
