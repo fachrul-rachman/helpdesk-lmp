@@ -15,7 +15,7 @@ uses(RefreshDatabase::class);
 
 function steAuth(User $user): array
 {
-    return ['Authorization' => 'Bearer ' . JWTAuth::fromUser($user)];
+    return ['Authorization' => 'Bearer '.JWTAuth::fromUser($user)];
 }
 
 function steDivision(string $name): Division
@@ -37,7 +37,8 @@ function steDivision(string $name): Division
 
 function steTicket(Customer $customer, Division $division, array $attributes): Ticket
 {
-    return Ticket::create(array_merge([
+    $timestamps = array_intersect_key($attributes, array_flip(['created_at', 'updated_at']));
+    $ticket = Ticket::create(array_merge([
         'customer_id' => $customer->id,
         'division_id' => $division->id,
         'assigned_to' => null,
@@ -47,7 +48,26 @@ function steTicket(Customer $customer, Division $division, array $attributes): T
         'subject' => 'Ticket export',
         'sla_fr_status' => 'done',
         'sla_resolution_status' => 'done',
-    ], $attributes));
+    ], array_diff_key($attributes, $timestamps)));
+
+    if ($timestamps !== []) {
+        $ticket->forceFill($timestamps)->saveQuietly();
+    }
+
+    return $ticket->fresh();
+}
+
+function steMessage(array $attributes): Message
+{
+    $createdAt = $attributes['created_at'] ?? null;
+    unset($attributes['created_at']);
+
+    $message = Message::create($attributes);
+    if ($createdAt) {
+        $message->forceFill(['created_at' => $createdAt])->saveQuietly();
+    }
+
+    return $message->fresh();
 }
 
 test('SPV dapat mengekspor ticket solved dan closed sesuai template dan first response PIC', function () {
@@ -73,63 +93,63 @@ test('SPV dapat mengekspor ticket solved dan closed sesuai template dan first re
         'assigned_to' => $picTerakhir->id,
         'subject' => 'Permintaan perubahan data',
         'status' => 'solved',
-        'created_at' => CarbonImmutable::parse('2026-06-02 01:15:00', 'UTC'),
-        'updated_at' => CarbonImmutable::parse('2026-06-03 03:00:00', 'UTC'),
-        'solved_at' => CarbonImmutable::parse('2026-06-03 03:00:00', 'UTC'),
+        'created_at' => CarbonImmutable::parse('2026-06-02 08:15:00', 'Asia/Jakarta'),
+        'updated_at' => CarbonImmutable::parse('2026-06-03 10:00:00', 'Asia/Jakarta'),
+        'solved_at' => CarbonImmutable::parse('2026-06-03 10:00:00', 'Asia/Jakarta'),
     ]);
-    Message::create([
+    steMessage([
         'ticket_id' => $solved->id,
         'customer_id' => $customer->id,
         'sender_type' => 'spv',
         'sender_id' => $spv->id,
         'content' => 'Pesan SPV tidak dihitung',
-        'created_at' => CarbonImmutable::parse('2026-06-02 01:20:00', 'UTC'),
+        'created_at' => CarbonImmutable::parse('2026-06-02 08:20:00', 'Asia/Jakarta'),
     ]);
-    Message::create([
+    steMessage([
         'ticket_id' => $solved->id,
         'customer_id' => $customer->id,
         'sender_type' => 'pic',
         'sender_id' => $picPertama->id,
         'content' => 'Respons PIC pertama',
-        'created_at' => CarbonImmutable::parse('2026-06-02 01:25:00', 'UTC'),
+        'created_at' => CarbonImmutable::parse('2026-06-02 08:25:00', 'Asia/Jakarta'),
     ]);
-    Message::create([
+    steMessage([
         'ticket_id' => $solved->id,
         'customer_id' => $customer->id,
         'sender_type' => 'pic',
         'sender_id' => $picTerakhir->id,
         'content' => 'Respons PIC setelah ticket dipindah',
-        'created_at' => CarbonImmutable::parse('2026-06-02 02:00:00', 'UTC'),
+        'created_at' => CarbonImmutable::parse('2026-06-02 09:00:00', 'Asia/Jakarta'),
     ]);
 
     $closed = steTicket($customer, $marketing, [
         'assigned_to' => $picPertama->id,
         'subject' => 'Ticket kedua',
         'status' => 'closed',
-        'created_at' => CarbonImmutable::parse('2026-06-10 02:00:00', 'UTC'),
-        'updated_at' => CarbonImmutable::parse('2026-06-11 09:30:00', 'UTC'),
-        'closed_at' => CarbonImmutable::parse('2026-06-11 09:30:00', 'UTC'),
+        'created_at' => CarbonImmutable::parse('2026-06-10 09:00:00', 'Asia/Jakarta'),
+        'updated_at' => CarbonImmutable::parse('2026-06-11 16:30:00', 'Asia/Jakarta'),
+        'closed_at' => CarbonImmutable::parse('2026-06-11 16:30:00', 'Asia/Jakarta'),
     ]);
-    Message::create([
+    steMessage([
         'ticket_id' => $closed->id,
         'customer_id' => $customer->id,
         'sender_type' => 'pic',
         'sender_id' => $picPertama->id,
         'content' => 'Respons kedua',
-        'created_at' => CarbonImmutable::parse('2026-06-10 02:08:00', 'UTC'),
+        'created_at' => CarbonImmutable::parse('2026-06-10 09:08:00', 'Asia/Jakarta'),
     ]);
 
     steTicket($customer, $marketing, [
         'subject' => 'Belum selesai',
         'status' => 'open',
         'sla_resolution_status' => 'running',
-        'created_at' => CarbonImmutable::parse('2026-06-05 02:00:00', 'UTC'),
+        'created_at' => CarbonImmutable::parse('2026-06-05 09:00:00', 'Asia/Jakarta'),
     ]);
     steTicket($customer, $marketing, [
         'subject' => 'Di luar periode',
         'status' => 'solved',
-        'created_at' => CarbonImmutable::parse('2026-05-30 02:00:00', 'UTC'),
-        'solved_at' => CarbonImmutable::parse('2026-05-31 02:00:00', 'UTC'),
+        'created_at' => CarbonImmutable::parse('2026-05-30 09:00:00', 'Asia/Jakarta'),
+        'solved_at' => CarbonImmutable::parse('2026-05-31 09:00:00', 'Asia/Jakarta'),
     ]);
 
     $response = $this->get('/api/spv/tickets/export?period=month', steAuth($spv));
@@ -144,7 +164,7 @@ test('SPV dapat mengekspor ticket solved dan closed sesuai template dan first re
     expect($sheet->getCell('A1')->getValue())->toContain('Periode: 1 – 30 Juni 2026');
     expect($sheet->getMergeCells())->toHaveKeys(['A1:K1', 'A2:A3', 'B2:B3', 'F2:G2', 'H2:I2', 'J2:K2']);
     expect($sheet->rangeToArray('A4:K4', null, true, true, false)[0])->toBe([
-        1,
+        '1',
         $solved->ticket_number,
         'Permintaan perubahan data',
         'Budiman',
@@ -172,8 +192,8 @@ test('rentang tanggal bebas bersifat inklusif dan divalidasi', function () {
     $customer = Customer::create(['phone_number' => '6281222222222', 'name' => 'Budi']);
 
     $ticket = steTicket($customer, $division, [
-        'created_at' => CarbonImmutable::parse('2026-06-20 16:59:59', 'UTC'),
-        'solved_at' => CarbonImmutable::parse('2026-06-21 02:00:00', 'UTC'),
+        'created_at' => CarbonImmutable::parse('2026-06-21 00:00:00', 'Asia/Jakarta'),
+        'solved_at' => CarbonImmutable::parse('2026-06-21 09:00:00', 'Asia/Jakarta'),
     ]);
 
     $response = $this->get('/api/spv/tickets/export?period=custom&start_date=2026-06-21&end_date=2026-06-21', steAuth($spv));

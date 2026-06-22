@@ -16,6 +16,7 @@ use App\Http\Controllers\Spv\ConversationController;
 use App\Http\Controllers\Spv\PicLookupController;
 use App\Http\Controllers\Spv\TakeoverRequestController as SpvTakeoverRequestController;
 use App\Http\Controllers\Spv\TicketController as SpvTicketController;
+use App\Http\Controllers\Spv\TicketExportController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\Webhook\N8nWebhookController;
 use App\Http\Controllers\Webhook\WhatsAppWebhookController;
@@ -79,6 +80,7 @@ Route::middleware(['auth.jwt'])->group(function (): void {
     Route::patch('customers/{id}/notes', [TicketController::class, 'updateCustomerNotes']);
 
     Route::prefix('spv')->middleware('role:spv')->group(function (): void {
+        Route::get('tickets/export', TicketExportController::class);
         Route::post('tickets', [SpvTicketController::class, 'store']);
         Route::get('customers/{id}/tickets', [SpvTicketController::class, 'customerTickets']);
         Route::get('analytics', AnalyticsController::class);
