@@ -30,8 +30,7 @@ test('holiday API request uses the provider co-id header', function () {
         putenv('HOLIDAY_API_KEY');
     }
 
-    Http::assertSent(fn (Request $request): bool =>
-        $request->hasHeader('X-API-co-id', 'test-co-id')
+    Http::assertSent(fn (Request $request): bool => $request->hasHeader('X-API-co-id', 'test-co-id')
         && ! $request->hasHeader('X-API-Key')
         && $request['year'] === 2026
     );

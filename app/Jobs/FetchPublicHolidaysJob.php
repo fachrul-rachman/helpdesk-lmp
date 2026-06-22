@@ -27,7 +27,7 @@ class FetchPublicHolidaysJob implements ShouldQueue
 
         try {
             $resp = Http::timeout(20)
-                ->withHeader('X-API-Key', $key)
+                ->withHeader('X-API-co-id', $key)
                 ->get($url, ['year' => $year]);
 
             if (!$resp->successful()) {
@@ -74,4 +74,3 @@ class FetchPublicHolidaysJob implements ShouldQueue
         }
     }
 }
-
