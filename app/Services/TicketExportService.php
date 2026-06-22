@@ -73,7 +73,7 @@ class TicketExportService
                 ? CarbonImmutable::instance($resolvedValue)->setTimezone($timezone)
                 : null;
 
-            $sheet->fromArray([[
+            $values = [
                 $index + 1,
                 $ticket->ticket_number,
                 $ticket->subject,
@@ -85,8 +85,14 @@ class TicketExportService
                 $respondedAt?->format('H:i'),
                 $resolvedAt?->format('d-m-Y'),
                 $resolvedAt?->format('H:i'),
-            ]], null, "A{$row}", true);
+            ];
+
             $sheet->setCellValueExplicit("A{$row}", $index + 1, DataType::TYPE_NUMERIC);
+            foreach (array_combine(range('B', 'K'), array_slice($values, 1)) as $column => $value) {
+                if ($value !== null) {
+                    $sheet->setCellValueExplicit("{$column}{$row}", (string) $value, DataType::TYPE_STRING);
+                }
+            }
             $sheet->getStyle("A{$row}:K{$row}")->getAlignment()
                 ->setVertical(Alignment::VERTICAL_CENTER);
         }

@@ -7,6 +7,7 @@ use App\Models\Ticket;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Tymon\JWTAuth\Facades\JWTAuth;
@@ -124,7 +125,7 @@ test('SPV dapat mengekspor ticket solved dan closed sesuai template dan first re
 
     $closed = steTicket($customer, $marketing, [
         'assigned_to' => $picPertama->id,
-        'subject' => 'Ticket kedua',
+        'subject' => '=2+2',
         'status' => 'closed',
         'created_at' => CarbonImmutable::parse('2026-06-10 09:00:00', 'Asia/Jakarta'),
         'updated_at' => CarbonImmutable::parse('2026-06-11 16:30:00', 'Asia/Jakarta'),
@@ -178,6 +179,8 @@ test('SPV dapat mengekspor ticket solved dan closed sesuai template dan first re
     ]);
     expect($sheet->getCell('A5')->getValue())->toBe(2);
     expect($sheet->getCell('B5')->getValue())->toBe($closed->ticket_number);
+    expect($sheet->getCell('C5')->getValue())->toBe('=2+2');
+    expect($sheet->getCell('C5')->getDataType())->toBe(DataType::TYPE_STRING);
     expect($sheet->getCell('A6')->getValue())->toBeNull();
 
     $spreadsheet->disconnectWorksheets();
