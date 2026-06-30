@@ -11,6 +11,20 @@ use Illuminate\Support\Facades\URL;
 
 class NotificationService
 {
+    private const TEMPLATE_PENDING_REMINDER = 'cust_ticket_will_be_closed';
+
+    private const TEMPLATE_SLA_FR_WARNING = 'sla_first_response_warning';
+
+    private const TEMPLATE_SLA_FR_BREACHED = 'sla_first_response_breached';
+
+    private const TEMPLATE_SLA_RESOLUTION_WARNING = 'sla_resolution_warning';
+
+    private const TEMPLATE_SLA_RESOLUTION_BREACHED = 'sla_resolution_breached';
+
+    private const TEMPLATE_TICKET_ASSIGNED = 'ticket_assigned_to_agent';
+
+    private const TEMPLATE_TICKET_REOPENED = 'ticket_on_progress_opened';
+
     public function sendText(string $toPhone, string $message): void
     {
         SendWhatsAppMessageJob::dispatch([
@@ -220,12 +234,12 @@ class NotificationService
         SendWhatsAppMessageJob::dispatch([
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
-            'to' => $agent->phone_number,
-            'type' => 'template',
-            'template' => [
-                'name' => 'ticket_assigned_to_agent',
-                'language' => ['code' => 'id'],
-                'components' => [
+                'to' => $agent->phone_number,
+                'type' => 'template',
+                'template' => [
+                'name' => self::TEMPLATE_TICKET_ASSIGNED,
+                    'language' => ['code' => 'id'],
+                    'components' => [
                     [
                         'type' => 'body',
                         'parameters' => [
@@ -240,7 +254,7 @@ class NotificationService
         ], [
             'to' => $agent->phone_number,
             'type' => 'template',
-            'template' => 'ticket_assigned_to_agent',
+            'template' => self::TEMPLATE_TICKET_ASSIGNED,
         ]);
     }
 
@@ -248,7 +262,7 @@ class NotificationService
     {
         $customerName = (string) optional($ticket->customer)->name;
 
-        $this->sendTemplate($pic->phone_number, 'pic_sla_fr_warning', [
+        $this->sendTemplate($pic->phone_number, self::TEMPLATE_SLA_FR_WARNING, [
             $pic->name,
             (string) $ticket->subject,
             $customerName !== '' ? $customerName : 'Customer',
@@ -260,7 +274,7 @@ class NotificationService
     {
         $customerName = (string) optional($ticket->customer)->name;
 
-        $this->sendTemplate($pic->phone_number, 'pic_sla_resolution_warning', [
+        $this->sendTemplate($pic->phone_number, self::TEMPLATE_SLA_RESOLUTION_WARNING, [
             $pic->name,
             (string) $ticket->subject,
             $customerName !== '' ? $customerName : 'Customer',
@@ -272,7 +286,7 @@ class NotificationService
     {
         $customerName = (string) optional($ticket->customer)->name;
 
-        $this->sendTemplate($pic->phone_number, 'pic_ticket_reopened', [
+        $this->sendTemplate($pic->phone_number, self::TEMPLATE_TICKET_REOPENED, [
             $pic->name,
             (string) $ticket->subject,
             $customerName !== '' ? $customerName : 'Customer',
@@ -285,7 +299,7 @@ class NotificationService
         $divisionName = (string) optional($ticket->division)->name;
         $picName = (string) optional($ticket->assignee)->name;
 
-        $this->sendTemplate($spv->phone_number, 'spv_sla_fr_overdue', [
+        $this->sendTemplate($spv->phone_number, self::TEMPLATE_SLA_FR_BREACHED, [
             (string) $ticket->subject,
             $customerName !== '' ? $customerName : 'Customer',
             $divisionName !== '' ? $divisionName : '-',
@@ -299,7 +313,7 @@ class NotificationService
         $divisionName = (string) optional($ticket->division)->name;
         $picName = (string) optional($ticket->assignee)->name;
 
-        $this->sendTemplate($spv->phone_number, 'spv_sla_resolution_overdue', [
+        $this->sendTemplate($spv->phone_number, self::TEMPLATE_SLA_RESOLUTION_BREACHED, [
             (string) $ticket->subject,
             $customerName !== '' ? $customerName : 'Customer',
             $divisionName !== '' ? $divisionName : '-',
@@ -317,7 +331,7 @@ class NotificationService
 
         $customerName = (string) ($customer->name ?? '');
 
-        $this->sendTemplate($customer->phone_number, 'customer_pending_reminder', [
+        $this->sendTemplate($customer->phone_number, self::TEMPLATE_PENDING_REMINDER, [
             $customerName !== '' ? $customerName : 'Halo',
             (string) $ticket->subject,
             (string) max(0, $remainingMinutes),

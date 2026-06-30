@@ -1251,7 +1251,7 @@ class TicketService
         // Backward-compatible wrapper.
         $this->notificationService->sendTemplate(
             $toPhone,
-            'customer_pending_reminder',
+            'cust_ticket_will_be_closed',
             [$customerName !== '' ? $customerName : 'Halo'],
         );
     }
