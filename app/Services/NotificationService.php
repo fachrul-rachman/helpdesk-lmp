@@ -215,6 +215,8 @@ class NotificationService
             $summary = (string) ($ticket->subject ?? '');
         }
         $summary = trim($summary);
+        $summary = str_replace(["\r", "\n", "\t"], ' ', $summary);
+        $summary = preg_replace('/\s+/', ' ', $summary) ?? $summary;
         if ($summary === '') {
             $summary = '-';
         }
