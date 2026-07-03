@@ -262,13 +262,49 @@ class NotificationService
 
     public function sendPicSlaFrWarning(User $pic, Ticket $ticket, int $remainingMinutes): void
     {
-        $customerName = (string) optional($ticket->customer)->name;
+        $ticket->loadMissing(['customer' => fn ($q) => $q->withTrashed()]);
 
-        $this->sendTemplate($pic->phone_number, self::TEMPLATE_SLA_FR_WARNING, [
-            $pic->name,
-            (string) $ticket->subject,
-            $customerName !== '' ? $customerName : 'Customer',
-            (string) max(0, $remainingMinutes),
+        $ticketNumber = trim((string) ($ticket->ticket_number ?? ''));
+        if ($ticketNumber === '' && $ticket->ticket_seq) {
+            $yearTwoDigits = optional($ticket->created_at)?->timezone('Asia/Jakarta')->format('y') ?? now('Asia/Jakarta')->format('y');
+            $ticketNumber = 'T'.$yearTwoDigits.'-'.str_pad((string) $ticket->ticket_seq, 5, '0', STR_PAD_LEFT);
+        }
+        if ($ticketNumber === '') {
+            $ticketNumber = '-';
+        }
+
+        $customerName = trim((string) optional($ticket->customer)->name);
+        if ($customerName === '') {
+            $customerName = 'Customer';
+        }
+
+        $enteredAt = optional($ticket->created_at)?->timezone('Asia/Jakarta')->format('H:i') ?? '-';
+        $remainingLabel = max(0, $remainingMinutes).' Menit';
+
+        SendWhatsAppMessageJob::dispatch([
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => $pic->phone_number,
+            'type' => 'template',
+            'template' => [
+                'name' => self::TEMPLATE_SLA_FR_WARNING,
+                'language' => ['code' => 'id'],
+                'components' => [
+                    [
+                        'type' => 'body',
+                        'parameters' => [
+                            ['type' => 'text', 'text' => $ticketNumber, 'parameter_name' => 'nomor_ticket'],
+                            ['type' => 'text', 'text' => $customerName, 'parameter_name' => 'nama_customer'],
+                            ['type' => 'text', 'text' => $enteredAt, 'parameter_name' => 'jam_masuk'],
+                            ['type' => 'text', 'text' => $remainingLabel, 'parameter_name' => 'sisa_waktu'],
+                        ],
+                    ],
+                ],
+            ],
+        ], [
+            'to' => $pic->phone_number,
+            'type' => 'template',
+            'template' => self::TEMPLATE_SLA_FR_WARNING,
         ]);
     }
 
@@ -297,15 +333,50 @@ class NotificationService
 
     public function sendSpvSlaFrOverdue(User $spv, Ticket $ticket): void
     {
-        $customerName = (string) optional($ticket->customer)->name;
-        $divisionName = (string) optional($ticket->division)->name;
-        $picName = (string) optional($ticket->assignee)->name;
+        $ticket->loadMissing(['customer' => fn ($q) => $q->withTrashed()]);
 
-        $this->sendTemplate($spv->phone_number, self::TEMPLATE_SLA_FR_BREACHED, [
-            (string) $ticket->subject,
-            $customerName !== '' ? $customerName : 'Customer',
-            $divisionName !== '' ? $divisionName : '-',
-            $picName !== '' ? $picName : 'Belum di-assign',
+        $ticketNumber = trim((string) ($ticket->ticket_number ?? ''));
+        if ($ticketNumber === '' && $ticket->ticket_seq) {
+            $yearTwoDigits = optional($ticket->created_at)?->timezone('Asia/Jakarta')->format('y') ?? now('Asia/Jakarta')->format('y');
+            $ticketNumber = 'T'.$yearTwoDigits.'-'.str_pad((string) $ticket->ticket_seq, 5, '0', STR_PAD_LEFT);
+        }
+        if ($ticketNumber === '') {
+            $ticketNumber = '-';
+        }
+
+        $customerName = trim((string) optional($ticket->customer)->name);
+        if ($customerName === '') {
+            $customerName = 'Customer';
+        }
+
+        $title = trim((string) ($ticket->subject ?? ''));
+        if ($title === '') {
+            $title = '-';
+        }
+
+        SendWhatsAppMessageJob::dispatch([
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => $spv->phone_number,
+            'type' => 'template',
+            'template' => [
+                'name' => self::TEMPLATE_SLA_FR_BREACHED,
+                'language' => ['code' => 'id'],
+                'components' => [
+                    [
+                        'type' => 'body',
+                        'parameters' => [
+                            ['type' => 'text', 'text' => $ticketNumber, 'parameter_name' => 'nomor_ticket'],
+                            ['type' => 'text', 'text' => $customerName, 'parameter_name' => 'nama_customer'],
+                            ['type' => 'text', 'text' => $title, 'parameter_name' => 'judul_ticket'],
+                        ],
+                    ],
+                ],
+            ],
+        ], [
+            'to' => $spv->phone_number,
+            'type' => 'template',
+            'template' => self::TEMPLATE_SLA_FR_BREACHED,
         ]);
     }
 
