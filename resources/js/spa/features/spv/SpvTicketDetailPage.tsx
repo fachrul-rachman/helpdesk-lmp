@@ -81,6 +81,7 @@ export function SpvTicketDetailPage() {
 
     const [ticketNotesDraft, setTicketNotesDraft] = useState('');
     const [customerNotesDraft, setCustomerNotesDraft] = useState('');
+    const [nextStatus, setNextStatus] = useState<TicketStatus | ''>('');
     const [nextPriority, setNextPriority] = useState<TicketPriority | ''>('');
     const [nextDivisionId, setNextDivisionId] = useState<string>('');
     const [nextPicId, setNextPicId] = useState<string>('');
@@ -112,6 +113,7 @@ export function SpvTicketDetailPage() {
 
                 setTicketNotesDraft(ticketRes.data.data.notes ?? '');
                 setCustomerNotesDraft(ticketRes.data.data.customer?.notes ?? '');
+                setNextStatus('');
                 setNextPriority('');
                 setNextDivisionId('');
                 setNextPicId('');
@@ -176,6 +178,24 @@ export function SpvTicketDetailPage() {
 
         return ticket.assigned_to?.role === 'spv' && ticket.assigned_to?.id === currentUser.id;
     }, [ticket, currentUser]);
+
+    const allowedTransitions = useMemo<TicketStatus[]>(() => {
+        if (!ticket) return [] as TicketStatus[];
+        if (ticket.status === 'open') return ['pending', 'on_progress', 'solved'];
+        if (ticket.status === 'pending') return ['open'];
+        if (ticket.status === 'on_progress') return ['open', 'solved'];
+        return [] as TicketStatus[];
+    }, [ticket]);
+
+    const statusLabel: Record<TicketStatus, string> = {
+        new: 'Baru',
+        open: 'Open',
+        pending: 'Pending',
+        on_progress: 'On Progress',
+        queue: 'Antrian',
+        solved: 'Solved',
+        closed: 'Closed',
+    };
 
     async function handleApproveTakeover() {
         if (!id) return;
@@ -275,7 +295,14 @@ export function SpvTicketDetailPage() {
         setIsUpdating(true);
         setErrorMessage(null);
         try {
-            // Urutan: division -> assign -> priority -> notes
+            // Urutan: status -> division -> assign -> priority -> notes
+            if (nextStatus) {
+                const res = await api.patch<TicketDetailResponse>(`/api/tickets/${ticket.id}/status`, {
+                    status: nextStatus,
+                });
+                setTicket(res.data.data);
+            }
+
             if (nextDivisionId) {
                 const res = await api.patch<TicketDetailResponse>(`/api/tickets/${ticket.id}/division`, {
                     division_id: nextDivisionId,
@@ -310,6 +337,7 @@ export function SpvTicketDetailPage() {
             ]);
 
             if (ticketNotesRes?.data?.data) setTicket(ticketNotesRes.data.data);
+            setNextStatus('');
             setNextPriority('');
             setNextDivisionId('');
             setNextPicId('');
@@ -378,6 +406,31 @@ export function SpvTicketDetailPage() {
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                     <StatusBadge status={ticket.status} />
                     <PriorityBadge priority={ticket.priority} />
+                </div>
+
+                <div className="mt-4 space-y-2">
+                    <div className="text-xs font-semibold text-slate-700">Ubah Status</div>
+                    {allowedTransitions.length === 0 ? (
+                        <div className="text-sm text-slate-600">
+                            {ticket.status === 'new'
+                                ? 'Status akan berubah menjadi Open saat ada respons pertama.'
+                                : 'Tidak ada perubahan status yang tersedia.'}
+                        </div>
+                    ) : (
+                        <select
+                            className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            value={nextStatus}
+                            onChange={(e) => setNextStatus((e.target.value as TicketStatus) || '')}
+                            disabled={isUpdating}
+                        >
+                            <option value="">(Tidak mengubah status)</option>
+                            {allowedTransitions.map((s) => (
+                                <option key={s} value={s}>
+                                    {statusLabel[s]}
+                                </option>
+                            ))}
+                        </select>
+                    )}
                 </div>
 
                 {ticket.takeover_request ? (
