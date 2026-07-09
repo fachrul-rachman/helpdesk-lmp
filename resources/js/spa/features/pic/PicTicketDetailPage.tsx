@@ -54,6 +54,13 @@ function senderLabel(senderType: TicketMessage['sender_type']) {
     return senderType.toUpperCase();
 }
 
+function formatFileSize(size: number) {
+    if (!Number.isFinite(size) || size <= 0) return '-';
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export function PicTicketDetailPage() {
     const { id } = useParams<{ id: string }>();
     const currentUser = useAuthStore((s) => s.user);
@@ -83,6 +90,13 @@ export function PicTicketDetailPage() {
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: 'auto' });
     }, [messages.length]);
+
+    useEffect(() => {
+        const el = messageBoxRef.current;
+        if (!el) return;
+        el.style.height = '0px';
+        el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+    }, [draft]);
 
     useEffect(() => {
         let isMounted = true;
@@ -447,6 +461,32 @@ export function PicTicketDetailPage() {
                         </div>
                     ) : null}
 
+                    {files.length ? (
+                        <div className="mb-3 space-y-2">
+                            {files.map((f, idx) => (
+                                <div
+                                    key={`${f.name}-${idx}`}
+                                    className="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2"
+                                >
+                                    <div className="min-w-0">
+                                        <div className="truncate text-sm font-medium text-slate-800">{f.name}</div>
+                                        <div className="text-xs text-slate-500">
+                                            {f.type || 'File'} • {formatFileSize(f.size)}
+                                        </div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+                                        onClick={() => setFiles((prev) => prev.filter((_, i) => i !== idx))}
+                                        title="Hapus file"
+                                    >
+                                        Hapus
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    ) : null}
+
                     <div className="flex gap-2">
                         <input
                             ref={fileInputRef}
@@ -473,8 +513,8 @@ export function PicTicketDetailPage() {
                         </Button>
                         <Textarea
                             ref={messageBoxRef}
-                            rows={1}
-                            className="min-h-10"
+                            rows={3}
+                            className="min-h-[88px] max-h-[200px] resize-y overflow-y-auto"
                             placeholder={canReply ? 'Ketik balasan...' : 'Ticket tidak bisa dibalas.'}
                             value={draft}
                             onChange={(e) => setDraft(e.target.value)}
@@ -497,22 +537,6 @@ export function PicTicketDetailPage() {
                             <SendIcon className="h-5 w-5" />
                         </Button>
                     </div>
-
-                    {files.length ? (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                            {files.map((f, idx) => (
-                                <button
-                                    key={`${f.name}-${idx}`}
-                                    type="button"
-                                    className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200"
-                                    onClick={() => setFiles((prev) => prev.filter((_, i) => i !== idx))}
-                                    title="Klik untuk hapus"
-                                >
-                                    {f.name}
-                                </button>
-                            ))}
-                        </div>
-                    ) : null}
                 </div>
             </div>
             </div>
