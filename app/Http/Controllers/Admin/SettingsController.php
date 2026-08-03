@@ -12,12 +12,13 @@ class SettingsController extends Controller
     public function show()
     {
         $settings = AppSetting::query()
-            ->whereIn('key', ['sla_fr_duration_minutes', 'sla_fr_reminder_minutes'])
+            ->whereIn('key', ['sla_fr_duration_minutes', 'sla_fr_reminder_minutes', 'notify_spv_on_new_ticket'])
             ->pluck('value', 'key');
 
         return response()->json([
             'sla_fr_duration_minutes' => (int) ($settings['sla_fr_duration_minutes'] ?? 5),
             'sla_fr_reminder_minutes' => (int) ($settings['sla_fr_reminder_minutes'] ?? 3),
+            'notify_spv_on_new_ticket' => (bool) ((int) ($settings['notify_spv_on_new_ticket'] ?? 0)),
         ]);
     }
 
@@ -26,6 +27,7 @@ class SettingsController extends Controller
         $data = $request->validate([
             'sla_fr_duration_minutes' => ['required', 'integer', 'min:1'],
             'sla_fr_reminder_minutes' => ['required', 'integer', 'min:0'],
+            'notify_spv_on_new_ticket' => ['required', 'boolean'],
         ]);
 
         if ($data['sla_fr_reminder_minutes'] >= $data['sla_fr_duration_minutes']) {
@@ -37,6 +39,7 @@ class SettingsController extends Controller
         AppSetting::upsert([
             ['key' => 'sla_fr_duration_minutes', 'value' => (string) $data['sla_fr_duration_minutes']],
             ['key' => 'sla_fr_reminder_minutes', 'value' => (string) $data['sla_fr_reminder_minutes']],
+            ['key' => 'notify_spv_on_new_ticket', 'value' => $data['notify_spv_on_new_ticket'] ? '1' : '0'],
         ], ['key'], ['value']);
 
         AuditLogger::log(
@@ -48,4 +51,3 @@ class SettingsController extends Controller
         return response()->json(['message' => 'Konfigurasi berhasil disimpan.'], 200);
     }
 }
-

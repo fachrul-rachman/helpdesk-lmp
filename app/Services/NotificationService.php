@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Jobs\SendWhatsAppMessageJob;
+use App\Models\AppSetting;
 use App\Models\Ticket;
 use App\Models\TicketSatisfactionReview;
 use App\Models\User;
@@ -196,6 +197,18 @@ class NotificationService
     {
         $ticket->loadMissing(['customer' => fn ($q) => $q->withTrashed(), 'division']);
 
+        $parameters = $this->buildAssignedTicketTemplateParameters($ticket);
+
+        $this->dispatchAssignedTicketTemplate($agent->phone_number, $parameters);
+
+        $this->sendNewTicketCopyToSpv($agent, $parameters);
+    }
+
+    /**
+     * @return array{ticket_number:string,customer_name:string,title:string,summary:string}
+     */
+    private function buildAssignedTicketTemplateParameters(Ticket $ticket): array
+    {
         $ticketNumber = trim((string) ($ticket->ticket_number ?? ''));
         if ($ticketNumber === '' && $ticket->ticket_seq) {
             $yearTwoDigits = optional($ticket->created_at)?->timezone('Asia/Jakarta')->format('y') ?? now('Asia/Jakarta')->format('y');
@@ -220,44 +233,82 @@ class NotificationService
         if ($summary === '') {
             $summary = '-';
         }
+        if (mb_strlen($summary) > 500) {
+            $summary = mb_substr($summary, 0, 497).'...';
+        }
 
         $title = trim((string) ($ticket->subject ?? ''));
         if ($title === '') {
             $title = '-';
         }
 
-        // Hindari payload terlalu panjang untuk template Meta.
-        if (mb_strlen($summary) > 500) {
-            $summary = mb_substr($summary, 0, 497).'...';
-        }
+        return [
+            'ticket_number' => $ticketNumber,
+            'customer_name' => $customerName,
+            'title' => $title,
+            'summary' => $summary,
+        ];
+    }
 
-        // Template ini dibuat dengan parameter bernama (named parameters) di Meta, jadi setiap parameter
-        // perlu menyertakan `parameter_name` agar tidak ditolak ("Parameter name is missing or empty").
+    /**
+     * @param  array{ticket_number:string,customer_name:string,title:string,summary:string}  $parameters
+     */
+    private function dispatchAssignedTicketTemplate(string $toPhone, array $parameters): void
+    {
         SendWhatsAppMessageJob::dispatch([
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
-                'to' => $agent->phone_number,
-                'type' => 'template',
-                'template' => [
+            'to' => $toPhone,
+            'type' => 'template',
+            'template' => [
                 'name' => self::TEMPLATE_TICKET_ASSIGNED,
-                    'language' => ['code' => 'id'],
-                    'components' => [
+                'language' => ['code' => 'id'],
+                'components' => [
                     [
                         'type' => 'body',
                         'parameters' => [
-                            ['type' => 'text', 'text' => $ticketNumber, 'parameter_name' => 'nomor_ticket'],
-                            ['type' => 'text', 'text' => $customerName, 'parameter_name' => 'nama_customer'],
-                            ['type' => 'text', 'text' => $title, 'parameter_name' => 'judul_ticket'],
-                            ['type' => 'text', 'text' => $summary, 'parameter_name' => 'ringkasan'],
+                            ['type' => 'text', 'text' => $parameters['ticket_number'], 'parameter_name' => 'nomor_ticket'],
+                            ['type' => 'text', 'text' => $parameters['customer_name'], 'parameter_name' => 'nama_customer'],
+                            ['type' => 'text', 'text' => $parameters['title'], 'parameter_name' => 'judul_ticket'],
+                            ['type' => 'text', 'text' => $parameters['summary'], 'parameter_name' => 'ringkasan'],
                         ],
                     ],
                 ],
             ],
         ], [
-            'to' => $agent->phone_number,
+            'to' => $toPhone,
             'type' => 'template',
             'template' => self::TEMPLATE_TICKET_ASSIGNED,
         ]);
+    }
+
+    /**
+     * @param  array{ticket_number:string,customer_name:string,title:string,summary:string}  $parameters
+     */
+    private function sendNewTicketCopyToSpv(User $agent, array $parameters): void
+    {
+        if ($agent->role !== 'pic') {
+            return;
+        }
+
+        $enabled = (bool) ((int) (AppSetting::query()->find('notify_spv_on_new_ticket')?->value ?? 0));
+        if (! $enabled) {
+            return;
+        }
+
+        /** @var User|null $spv */
+        $spv = User::query()
+            ->where('role', 'spv')
+            ->where('is_active', true)
+            ->whereNotNull('phone_number')
+            ->orderBy('created_at')
+            ->first();
+
+        if (! $spv || $spv->phone_number === '') {
+            return;
+        }
+
+        $this->dispatchAssignedTicketTemplate($spv->phone_number, $parameters);
     }
 
     public function sendPicSlaFrWarning(User $pic, Ticket $ticket, int $remainingMinutes): void

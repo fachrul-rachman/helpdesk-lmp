@@ -44,6 +44,7 @@ export type AdminDivisionsIndexResponse = {
 export type AdminSettingsResponse = {
     sla_fr_duration_minutes: number;
     sla_fr_reminder_minutes: number;
+    notify_spv_on_new_ticket: boolean;
 };
 
 export type AdminAuditLogListItem = {
@@ -61,4 +62,3 @@ export type AdminAuditLogsIndexResponse = {
     data: AdminAuditLogListItem[];
     meta: { total: number; page: number; per_page: number };
 };
-

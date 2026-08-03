@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\AppSetting;
 use App\Models\Customer;
 use App\Models\Division;
 use App\Models\Ticket;
@@ -116,4 +117,72 @@ test('notification retry dispatched after 30 seconds once', function () {
     Bus::assertDispatched(\App\Jobs\SendWhatsAppMessageJob::class, function ($job) {
         return $job->tries === 2 && (int) $job->backoff === 30;
     });
+});
+
+test('new ticket notification can also be copied to spv via setting', function () {
+    config(['queue.default' => 'sync']);
+
+    putenv('META_WA_TOKEN=test-token');
+    putenv('META_WA_PHONE_NUMBER_ID=123');
+    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
+    $_ENV['META_WA_TOKEN'] = 'test-token';
+    $_ENV['META_WA_PHONE_NUMBER_ID'] = '123';
+    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
+
+    Http::fake([
+        'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
+    ]);
+
+    AppSetting::create([
+        'key' => 'notify_spv_on_new_ticket',
+        'value' => '1',
+    ]);
+
+    $division = Division::create([
+        'name' => 'Teknis',
+        'description' => 'Desc',
+        'handles' => 'Handles',
+        'not_handles' => 'Not',
+        'ticket_examples' => 'Examples',
+        'sla_resolution_value' => 3,
+        'sla_resolution_unit' => 'days',
+        'sla_resolution_reminder_value' => 12,
+        'sla_resolution_reminder_unit' => 'hours',
+        'is_fallback' => false,
+        'is_active' => true,
+    ]);
+
+    $customer = Customer::create(['phone_number' => '6283333333333', 'name' => 'Andi']);
+    $pic = User::factory()->create([
+        'role' => 'pic',
+        'division_id' => $division->id,
+        'is_active' => true,
+        'phone_number' => '6281111111111',
+        'name' => 'Budi',
+    ]);
+    User::factory()->create([
+        'role' => 'spv',
+        'division_id' => null,
+        'is_active' => true,
+        'phone_number' => '6282222222222',
+        'name' => 'SPV',
+    ]);
+
+    $ticket = Ticket::create([
+        'customer_id' => $customer->id,
+        'division_id' => $division->id,
+        'assigned_to' => $pic->id,
+        'created_by' => 'ai',
+        'priority' => 'high',
+        'status' => 'new',
+        'subject' => 'Laptop tidak menyala',
+        'sla_fr_status' => 'running',
+        'sla_resolution_status' => 'waiting',
+    ])->fresh(['customer', 'division', 'assignee']);
+
+    app(NotificationService::class)->sendTicketAssignedToAgent($pic, $ticket);
+
+    Http::assertSentCount(2);
+    Http::assertSent(fn ($request) => ($request['to'] ?? null) === '6281111111111');
+    Http::assertSent(fn ($request) => ($request['to'] ?? null) === '6282222222222');
 });

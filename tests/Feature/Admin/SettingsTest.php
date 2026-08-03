@@ -25,12 +25,14 @@ test('admin can get settings', function () {
     AppSetting::upsert([
         ['key' => 'sla_fr_duration_minutes', 'value' => '5'],
         ['key' => 'sla_fr_reminder_minutes', 'value' => '3'],
+        ['key' => 'notify_spv_on_new_ticket', 'value' => '1'],
     ], ['key'], ['value']);
 
     $response = $this->getJson('/api/admin/settings', adminJwt());
     $response->assertOk()->assertJson([
         'sla_fr_duration_minutes' => 5,
         'sla_fr_reminder_minutes' => 3,
+        'notify_spv_on_new_ticket' => true,
     ]);
 });
 
@@ -38,16 +40,19 @@ test('admin can update settings', function () {
     $response = $this->putJson('/api/admin/settings', [
         'sla_fr_duration_minutes' => 10,
         'sla_fr_reminder_minutes' => 3,
+        'notify_spv_on_new_ticket' => true,
     ], adminJwt());
 
     $response->assertOk();
     expect(AppSetting::query()->where('key', 'sla_fr_duration_minutes')->value('value'))->toBe('10');
+    expect(AppSetting::query()->where('key', 'notify_spv_on_new_ticket')->value('value'))->toBe('1');
 });
 
 test('settings reminder must be less than duration', function () {
     $response = $this->putJson('/api/admin/settings', [
         'sla_fr_duration_minutes' => 5,
         'sla_fr_reminder_minutes' => 5,
+        'notify_spv_on_new_ticket' => false,
     ], adminJwt());
 
     $response->assertStatus(422)->assertJson([
