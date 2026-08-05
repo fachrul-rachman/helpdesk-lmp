@@ -22,7 +22,7 @@ class WhatsAppWebhookController extends Controller
             ?? $request->query('hub_challenge')
             ?? '');
 
-        if ($verifyToken !== (string) env('META_WA_VERIFY_TOKEN', '')) {
+        if ($verifyToken !== (string) config('services.meta_whatsapp.verify_token', '')) {
             return response('Forbidden', 403);
         }
 
@@ -51,7 +51,7 @@ class WhatsAppWebhookController extends Controller
 
     private function isValidSignature(string $payload, ?string $headerSignature): bool
     {
-        $secret = (string) (getenv('META_WA_APP_SECRET') ?: env('META_WA_APP_SECRET', ''));
+        $secret = (string) config('services.meta_whatsapp.app_secret', '');
         if ($secret === '' || ! $headerSignature) {
             return false;
         }
