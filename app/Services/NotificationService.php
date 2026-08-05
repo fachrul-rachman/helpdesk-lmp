@@ -166,7 +166,7 @@ class NotificationService
 
         // Beberapa implementasi Cloud API mendukung typing_indicator saat mark-as-read.
         // Jika tidak didukung, Meta akan mengembalikan 4xx (no-retry) dan sistem tetap berjalan.
-        $enabled = filter_var((string) env('META_WA_TYPING_INDICATOR_ENABLED', 'true'), FILTER_VALIDATE_BOOLEAN);
+        $enabled = (bool) config('services.meta_whatsapp.typing_indicator_enabled', true);
         if ($enabled) {
             $payload['typing_indicator'] = [
                 'type' => in_array($typingType, ['text', 'audio', 'video', 'image', 'document'], true) ? $typingType : 'text',

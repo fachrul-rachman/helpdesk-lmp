@@ -15,8 +15,8 @@ class FetchPublicHolidaysJob implements ShouldQueue
 
     public function handle(): void
     {
-        $url = (string) (getenv('HOLIDAY_API_URL') ?: env('HOLIDAY_API_URL', ''));
-        $key = (string) (getenv('HOLIDAY_API_KEY') ?: env('HOLIDAY_API_KEY', ''));
+        $url = (string) config('services.holiday_api.url', '');
+        $key = (string) config('services.holiday_api.key', '');
 
         if ($url === '' || $key === '') {
             Log::warning('holiday_api.missing_config');

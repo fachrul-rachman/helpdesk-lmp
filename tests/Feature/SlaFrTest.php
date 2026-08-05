@@ -94,10 +94,10 @@ test('sla fr reminder sent before deadline', function () {
         'sla_resolution_status' => 'waiting',
     ]);
 
-    putenv('META_WA_TOKEN=test-token');
-    putenv('META_WA_PHONE_NUMBER_ID=123');
-    $_ENV['META_WA_TOKEN'] = 'test-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = '123';
+    config([
+        'services.meta_whatsapp.token' => 'test-token',
+        'services.meta_whatsapp.phone_number_id' => '123',
+    ]);
 
     Http::fake([
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'x']]], 200),
@@ -161,10 +161,10 @@ test('sla fr overdue status updated and not sent twice', function () {
         'sla_resolution_status' => 'waiting',
     ]);
 
-    putenv('META_WA_TOKEN=test-token');
-    putenv('META_WA_PHONE_NUMBER_ID=123');
-    $_ENV['META_WA_TOKEN'] = 'test-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = '123';
+    config([
+        'services.meta_whatsapp.token' => 'test-token',
+        'services.meta_whatsapp.phone_number_id' => '123',
+    ]);
 
     Http::fake([
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'x']]], 200),

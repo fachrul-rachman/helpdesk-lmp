@@ -19,7 +19,7 @@ class N8nWebhookController extends Controller
     public function handle(Request $request)
     {
         $secret = (string) $request->header('X-N8N-Secret', '');
-        $expected = (string) (env('N8N_INCOMING_SECRET', '') ?: env('N8N_SECRET', ''));
+        $expected = (string) (config('services.n8n.incoming_secret') ?: config('services.n8n.secret', ''));
         if ($secret === '' || $expected === '' || $secret !== $expected) {
             return response()->json(['message' => 'Unauthorized.'], 401);
         }

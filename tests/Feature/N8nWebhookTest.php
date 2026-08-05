@@ -13,10 +13,13 @@ use Illuminate\Support\Facades\Storage;
 uses(RefreshDatabase::class);
 
 beforeEach(function () {
-    config(['queue.default' => 'sync']);
-
-    putenv('N8N_INCOMING_SECRET=incoming-secret');
-    $_ENV['N8N_INCOMING_SECRET'] = 'incoming-secret';
+    config([
+        'queue.default' => 'sync',
+        'broadcasting.default' => 'log',
+    ]);
+    config([
+        'services.n8n.incoming_secret' => 'incoming-secret',
+    ]);
 });
 
 function noisyPngBytes(int $size = 1500): string
@@ -55,12 +58,11 @@ test('ticket created from n8n payload', function () {
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
     ]);
 
-    putenv('META_WA_TOKEN=meta-token');
-    putenv('META_WA_PHONE_NUMBER_ID=PHONE_ID');
-    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
-    $_ENV['META_WA_TOKEN'] = 'meta-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = 'PHONE_ID';
-    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
+    config([
+        'services.meta_whatsapp.token' => 'meta-token',
+        'services.meta_whatsapp.phone_number_id' => 'PHONE_ID',
+        'services.meta_whatsapp.api_url' => 'https://graph.facebook.com/v18.0',
+    ]);
 
     $division = Division::create([
         'name' => 'Teknis',
@@ -158,12 +160,11 @@ test('ai reply sent to customer', function () {
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
     ]);
 
-    putenv('META_WA_TOKEN=meta-token');
-    putenv('META_WA_PHONE_NUMBER_ID=PHONE_ID');
-    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
-    $_ENV['META_WA_TOKEN'] = 'meta-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = 'PHONE_ID';
-    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
+    config([
+        'services.meta_whatsapp.token' => 'meta-token',
+        'services.meta_whatsapp.phone_number_id' => 'PHONE_ID',
+        'services.meta_whatsapp.api_url' => 'https://graph.facebook.com/v18.0',
+    ]);
 
     $customer = Customer::create(['phone_number' => '628123456789', 'name' => 'Andi']);
 
@@ -189,14 +190,12 @@ test('ai media reply sends supported media types to customer', function (string 
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
     ]);
 
-    putenv('META_WA_TOKEN=meta-token');
-    putenv('META_WA_PHONE_NUMBER_ID=PHONE_ID');
-    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
-    putenv('CLOUDFLARE_R2_URL=https://cdn.example.test');
-    $_ENV['META_WA_TOKEN'] = 'meta-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = 'PHONE_ID';
-    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
-    $_ENV['CLOUDFLARE_R2_URL'] = 'https://cdn.example.test';
+    config([
+        'services.meta_whatsapp.token' => 'meta-token',
+        'services.meta_whatsapp.phone_number_id' => 'PHONE_ID',
+        'services.meta_whatsapp.api_url' => 'https://graph.facebook.com/v18.0',
+        'filesystems.disks.r2.url' => 'https://cdn.example.test',
+    ]);
 
     Storage::disk('r2')->put($key, 'file');
     Customer::create(['phone_number' => '628123456789', 'name' => 'Andi']);
@@ -271,14 +270,12 @@ test('ai media reply can send image file as document fallback', function () {
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
     ]);
 
-    putenv('META_WA_TOKEN=meta-token');
-    putenv('META_WA_PHONE_NUMBER_ID=PHONE_ID');
-    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
-    putenv('CLOUDFLARE_R2_URL=https://cdn.example.test');
-    $_ENV['META_WA_TOKEN'] = 'meta-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = 'PHONE_ID';
-    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
-    $_ENV['CLOUDFLARE_R2_URL'] = 'https://cdn.example.test';
+    config([
+        'services.meta_whatsapp.token' => 'meta-token',
+        'services.meta_whatsapp.phone_number_id' => 'PHONE_ID',
+        'services.meta_whatsapp.api_url' => 'https://graph.facebook.com/v18.0',
+        'filesystems.disks.r2.url' => 'https://cdn.example.test',
+    ]);
 
     Storage::disk('r2')->put('media/2026/05/sitemap-karawang.png', 'file');
     Customer::create(['phone_number' => '628123456789', 'name' => 'Andi']);
@@ -313,14 +310,12 @@ test('ai media reply compresses large image before sending as image', function (
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
     ]);
 
-    putenv('META_WA_TOKEN=meta-token');
-    putenv('META_WA_PHONE_NUMBER_ID=PHONE_ID');
-    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
-    putenv('CLOUDFLARE_R2_URL=https://cdn.example.test');
-    $_ENV['META_WA_TOKEN'] = 'meta-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = 'PHONE_ID';
-    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
-    $_ENV['CLOUDFLARE_R2_URL'] = 'https://cdn.example.test';
+    config([
+        'services.meta_whatsapp.token' => 'meta-token',
+        'services.meta_whatsapp.phone_number_id' => 'PHONE_ID',
+        'services.meta_whatsapp.api_url' => 'https://graph.facebook.com/v18.0',
+        'filesystems.disks.r2.url' => 'https://cdn.example.test',
+    ]);
 
     $key = 'media/2026/05/large-sitemap.png';
     $bytes = noisyPngBytes();
@@ -363,14 +358,12 @@ test('ai media reply falls back to document when large image cannot be compresse
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
     ]);
 
-    putenv('META_WA_TOKEN=meta-token');
-    putenv('META_WA_PHONE_NUMBER_ID=PHONE_ID');
-    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
-    putenv('CLOUDFLARE_R2_URL=https://cdn.example.test');
-    $_ENV['META_WA_TOKEN'] = 'meta-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = 'PHONE_ID';
-    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
-    $_ENV['CLOUDFLARE_R2_URL'] = 'https://cdn.example.test';
+    config([
+        'services.meta_whatsapp.token' => 'meta-token',
+        'services.meta_whatsapp.phone_number_id' => 'PHONE_ID',
+        'services.meta_whatsapp.api_url' => 'https://graph.facebook.com/v18.0',
+        'filesystems.disks.r2.url' => 'https://cdn.example.test',
+    ]);
 
     $key = 'media/2026/05/broken-sitemap.png';
     Storage::disk('r2')->put($key, str_repeat('x', MediaService::WHATSAPP_IMAGE_MAX_BYTES + 1));
@@ -407,14 +400,12 @@ test('ai media reply rejects missing storage key before sending to meta', functi
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
     ]);
 
-    putenv('META_WA_TOKEN=meta-token');
-    putenv('META_WA_PHONE_NUMBER_ID=PHONE_ID');
-    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
-    putenv('CLOUDFLARE_R2_URL=https://cdn.example.test');
-    $_ENV['META_WA_TOKEN'] = 'meta-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = 'PHONE_ID';
-    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
-    $_ENV['CLOUDFLARE_R2_URL'] = 'https://cdn.example.test';
+    config([
+        'services.meta_whatsapp.token' => 'meta-token',
+        'services.meta_whatsapp.phone_number_id' => 'PHONE_ID',
+        'services.meta_whatsapp.api_url' => 'https://graph.facebook.com/v18.0',
+        'filesystems.disks.r2.url' => 'https://cdn.example.test',
+    ]);
 
     Customer::create(['phone_number' => '628123456789', 'name' => 'Andi']);
 
@@ -480,12 +471,11 @@ test('system error sends template', function () {
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
     ]);
 
-    putenv('META_WA_TOKEN=meta-token');
-    putenv('META_WA_PHONE_NUMBER_ID=PHONE_ID');
-    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
-    $_ENV['META_WA_TOKEN'] = 'meta-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = 'PHONE_ID';
-    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
+    config([
+        'services.meta_whatsapp.token' => 'meta-token',
+        'services.meta_whatsapp.phone_number_id' => 'PHONE_ID',
+        'services.meta_whatsapp.api_url' => 'https://graph.facebook.com/v18.0',
+    ]);
 
     Customer::create(['phone_number' => '628123456789', 'name' => 'Andi']);
 
@@ -500,4 +490,22 @@ test('system error sends template', function () {
     $resp->assertOk();
 
     Http::assertSent(fn ($request) => (($request['type'] ?? null) === 'template'));
+});
+
+test('n8n webhook still uses cached config secret when env changes', function () {
+    config([
+        'services.n8n.incoming_secret' => 'cached-incoming-secret',
+    ]);
+    putenv('N8N_INCOMING_SECRET=wrong-secret');
+
+    $this->postJson('/api/webhook/n8n', [
+        'event' => 'message.reply',
+        'customer_phone_number' => '08123456789',
+        'ai_reply' => [
+            'message' => 'tes',
+            'type' => 'text',
+        ],
+    ], [
+        'X-N8N-Secret' => 'cached-incoming-secret',
+    ])->assertStatus(422);
 });

@@ -16,13 +16,11 @@ uses(RefreshDatabase::class);
 
 test('notification templates build correct payloads', function () {
     config(['queue.default' => 'sync']);
-
-    putenv('META_WA_TOKEN=test-token');
-    putenv('META_WA_PHONE_NUMBER_ID=123');
-    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
-    $_ENV['META_WA_TOKEN'] = 'test-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = '123';
-    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
+    config([
+        'services.meta_whatsapp.token' => 'test-token',
+        'services.meta_whatsapp.phone_number_id' => '123',
+        'services.meta_whatsapp.api_url' => 'https://graph.facebook.com/v18.0',
+    ]);
 
     Http::fake([
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
@@ -101,13 +99,11 @@ test('notification templates build correct payloads', function () {
 
 test('notification retry dispatched after 30 seconds once', function () {
     config(['queue.default' => 'database']);
-
-    putenv('META_WA_TOKEN=test-token');
-    putenv('META_WA_PHONE_NUMBER_ID=123');
-    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
-    $_ENV['META_WA_TOKEN'] = 'test-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = '123';
-    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
+    config([
+        'services.meta_whatsapp.token' => 'test-token',
+        'services.meta_whatsapp.phone_number_id' => '123',
+        'services.meta_whatsapp.api_url' => 'https://graph.facebook.com/v18.0',
+    ]);
 
     Bus::fake();
 
@@ -121,13 +117,11 @@ test('notification retry dispatched after 30 seconds once', function () {
 
 test('new ticket notification can also be copied to spv via setting', function () {
     config(['queue.default' => 'sync']);
-
-    putenv('META_WA_TOKEN=test-token');
-    putenv('META_WA_PHONE_NUMBER_ID=123');
-    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
-    $_ENV['META_WA_TOKEN'] = 'test-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = '123';
-    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
+    config([
+        'services.meta_whatsapp.token' => 'test-token',
+        'services.meta_whatsapp.phone_number_id' => '123',
+        'services.meta_whatsapp.api_url' => 'https://graph.facebook.com/v18.0',
+    ]);
 
     Http::fake([
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),

@@ -20,6 +20,10 @@ return [
         'passwords' => env('AUTH_PASSWORD_BROKER', 'users'),
     ],
 
+    'access_token_ttl_seconds' => env('JWT_ACCESS_TTL', 900),
+
+    'refresh_token_ttl_seconds' => env('JWT_REFRESH_TTL', 2_592_000),
+
     /*
     |--------------------------------------------------------------------------
     | Authentication Guards

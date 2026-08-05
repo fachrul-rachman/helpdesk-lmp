@@ -15,9 +15,9 @@ class MetaWhatsAppTemplateService
      */
     public function fetchAllTemplates(): array
     {
-        $token = (string) (getenv('META_WA_TOKEN') ?: env('META_WA_TOKEN', ''));
-        $wabaId = (string) (getenv('META_WA_WABA_ID') ?: env('META_WA_WABA_ID', ''));
-        $apiUrl = rtrim((string) (getenv('META_WA_API_URL') ?: env('META_WA_API_URL', 'https://graph.facebook.com/v18.0')), '/');
+        $token = (string) config('services.meta_whatsapp.token', '');
+        $wabaId = (string) config('services.meta_whatsapp.waba_id', '');
+        $apiUrl = rtrim((string) config('services.meta_whatsapp.api_url', 'https://graph.facebook.com/v18.0'), '/');
 
         if ($token === '' || $wabaId === '' || $apiUrl === '') {
             throw new HttpException(422, 'Konfigurasi Meta WA belum lengkap (META_WA_TOKEN, META_WA_WABA_ID, META_WA_API_URL).');
@@ -114,4 +114,3 @@ class MetaWhatsAppTemplateService
         return ['synced' => count($rows), 'total' => count($items)];
     }
 }
-

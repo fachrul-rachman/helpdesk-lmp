@@ -162,7 +162,7 @@ class ProcessWhatsAppIncomingMessageJob implements ShouldQueue
 
                     $attachmentPayloadForN8n[] = [
                         'type' => $attType !== '' ? $attType : $messageType,
-                        'r2_bucket' => (string) (getenv('CLOUDFLARE_R2_BUCKET') ?: env('CLOUDFLARE_R2_BUCKET', '')),
+                        'r2_bucket' => (string) config('filesystems.disks.r2.bucket', ''),
                         'r2_key' => $r2Key,
                         'r2_url' => $publicUrl,
                         'mime_type' => $mimeType !== '' ? $mimeType : ($downloaded['mime_type'] ?? ''),
@@ -233,7 +233,7 @@ class ProcessWhatsAppIncomingMessageJob implements ShouldQueue
         string $messageType,
         array $attachments,
     ): void {
-        $debounceSeconds = (int) (getenv('N8N_DEBOUNCE_SECONDS') ?: env('N8N_DEBOUNCE_SECONDS', 5));
+        $debounceSeconds = (int) config('services.n8n.debounce_seconds', 5);
         $debounceSeconds = max(1, min(60, $debounceSeconds));
 
         $ticketPart = $event === 'message.on_progress' && $ticket

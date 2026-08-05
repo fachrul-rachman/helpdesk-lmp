@@ -22,15 +22,12 @@ test('POST messages mendukung upload attachment dan menyimpan ke r2', function (
     config(['queue.default' => 'sync']);
     Storage::fake('r2');
 
-    putenv('CLOUDFLARE_R2_URL=https://cdn.example.com');
-    $_ENV['CLOUDFLARE_R2_URL'] = 'https://cdn.example.com';
-
-    putenv('META_WA_TOKEN=test-token');
-    putenv('META_WA_PHONE_NUMBER_ID=123');
-    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
-    $_ENV['META_WA_TOKEN'] = 'test-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = '123';
-    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
+    config([
+        'filesystems.disks.r2.url' => 'https://cdn.example.com',
+        'services.meta_whatsapp.token' => 'test-token',
+        'services.meta_whatsapp.phone_number_id' => '123',
+        'services.meta_whatsapp.api_url' => 'https://graph.facebook.com/v18.0',
+    ]);
 
     Http::fake([
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
@@ -91,4 +88,3 @@ test('POST messages mendukung upload attachment dan menyimpan ke r2', function (
         return ($request['type'] ?? null) !== 'text' && ($request['type'] ?? null) !== 'template';
     });
 });
-

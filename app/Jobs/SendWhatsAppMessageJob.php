@@ -38,9 +38,9 @@ class SendWhatsAppMessageJob implements ShouldQueue
 
     public function handle(): void
     {
-        $token = (string) (getenv('META_WA_TOKEN') ?: env('META_WA_TOKEN', ''));
-        $phoneNumberId = (string) (getenv('META_WA_PHONE_NUMBER_ID') ?: env('META_WA_PHONE_NUMBER_ID', ''));
-        $apiUrl = rtrim((string) (getenv('META_WA_API_URL') ?: env('META_WA_API_URL', 'https://graph.facebook.com/v18.0')), '/');
+        $token = (string) config('services.meta_whatsapp.token', '');
+        $phoneNumberId = (string) config('services.meta_whatsapp.phone_number_id', '');
+        $apiUrl = rtrim((string) config('services.meta_whatsapp.api_url', 'https://graph.facebook.com/v18.0'), '/');
 
         if ($token === '' || $phoneNumberId === '' || $apiUrl === '') {
             Log::warning('meta.missing_config', $this->logContext);

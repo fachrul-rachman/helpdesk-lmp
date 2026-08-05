@@ -15,6 +15,23 @@ return [
     'meta_whatsapp' => [
         'verify_token' => env('META_WA_VERIFY_TOKEN'),
         'app_secret' => env('META_WA_APP_SECRET'),
+        'token' => env('META_WA_TOKEN'),
+        'phone_number_id' => env('META_WA_PHONE_NUMBER_ID'),
+        'api_url' => env('META_WA_API_URL', 'https://graph.facebook.com/v18.0'),
+        'waba_id' => env('META_WA_WABA_ID'),
+        'typing_indicator_enabled' => env('META_WA_TYPING_INDICATOR_ENABLED', true),
+    ],
+
+    'n8n' => [
+        'webhook_url' => env('N8N_WEBHOOK_URL'),
+        'secret' => env('N8N_SECRET'),
+        'incoming_secret' => env('N8N_INCOMING_SECRET'),
+        'debounce_seconds' => env('N8N_DEBOUNCE_SECONDS', 5),
+    ],
+
+    'holiday_api' => [
+        'url' => env('HOLIDAY_API_URL'),
+        'key' => env('HOLIDAY_API_KEY'),
     ],
 
     'postmark' => [

@@ -32,8 +32,8 @@ class AuthService
             throw new HttpException(401, 'Akun Anda tidak aktif. Hubungi admin.');
         }
 
-        $accessTtlSeconds = (int) env('JWT_ACCESS_TTL', 900);
-        $refreshTtlSeconds = (int) env('JWT_REFRESH_TTL', 2_592_000);
+        $accessTtlSeconds = (int) config('auth.access_token_ttl_seconds', 900);
+        $refreshTtlSeconds = (int) config('auth.refresh_token_ttl_seconds', 2_592_000);
 
         $accessToken = $this->issueAccessToken($user, $accessTtlSeconds);
         $refreshToken = $this->issueRefreshToken($user, $refreshTtlSeconds);
@@ -81,7 +81,7 @@ class AuthService
             throw new HttpException(401, 'Refresh token tidak valid atau sudah kadaluarsa.');
         }
 
-        $accessTtlSeconds = (int) env('JWT_ACCESS_TTL', 900);
+        $accessTtlSeconds = (int) config('auth.access_token_ttl_seconds', 900);
         $accessToken = $this->issueAccessToken($user, $accessTtlSeconds);
 
         return [
@@ -220,4 +220,3 @@ class AuthService
         ]);
     }
 }
-

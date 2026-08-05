@@ -8,8 +8,10 @@ use Illuminate\Support\Facades\Http;
 uses(RefreshDatabase::class);
 
 test('holiday API request uses the provider co-id header', function () {
-    putenv('HOLIDAY_API_URL=https://holidays.test/api');
-    putenv('HOLIDAY_API_KEY=test-co-id');
+    config([
+        'services.holiday_api.url' => 'https://holidays.test/api',
+        'services.holiday_api.key' => 'test-co-id',
+    ]);
 
     Http::fake([
         'https://holidays.test/api*' => Http::response([
@@ -23,12 +25,7 @@ test('holiday API request uses the provider co-id header', function () {
         ]),
     ]);
 
-    try {
-        (new FetchPublicHolidaysJob)->handle();
-    } finally {
-        putenv('HOLIDAY_API_URL');
-        putenv('HOLIDAY_API_KEY');
-    }
+    (new FetchPublicHolidaysJob)->handle();
 
     Http::assertSent(fn (Request $request): bool => $request->hasHeader('X-API-co-id', 'test-co-id')
         && ! $request->hasHeader('X-API-Key')

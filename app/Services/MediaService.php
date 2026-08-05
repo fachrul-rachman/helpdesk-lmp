@@ -111,8 +111,8 @@ class MediaService
 
     public function downloadFromMeta(string $mediaId): array
     {
-        $metaToken = (string) (getenv('META_WA_TOKEN') ?: env('META_WA_TOKEN', ''));
-        $baseUrl = rtrim((string) (getenv('META_WA_API_URL') ?: env('META_WA_API_URL', 'https://graph.facebook.com/v18.0')), '/');
+        $metaToken = (string) config('services.meta_whatsapp.token', '');
+        $baseUrl = rtrim((string) config('services.meta_whatsapp.api_url', 'https://graph.facebook.com/v18.0'), '/');
 
         if ($metaToken === '') {
             throw new HttpException(500, 'Terjadi kesalahan pada server.');
@@ -208,7 +208,7 @@ class MediaService
 
     public function getPublicUrl(string $r2Key): string
     {
-        $base = rtrim((string) (getenv('CLOUDFLARE_R2_URL') ?: env('CLOUDFLARE_R2_URL', '')), '/');
+        $base = rtrim((string) config('filesystems.disks.r2.url', ''), '/');
 
         if ($base !== '') {
             $encodedKey = implode('/', array_map('rawurlencode', explode('/', ltrim($r2Key, '/'))));

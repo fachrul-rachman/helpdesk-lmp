@@ -23,7 +23,7 @@ class DebouncedForwardToN8nJob implements ShouldQueue
 
     public function handle(NotificationService $notificationService): void
     {
-        $debounceSeconds = (int) (getenv('N8N_DEBOUNCE_SECONDS') ?: env('N8N_DEBOUNCE_SECONDS', 5));
+        $debounceSeconds = (int) config('services.n8n.debounce_seconds', 5);
         $debounceSeconds = max(1, min(60, $debounceSeconds));
 
         /** @var array<string, mixed>|null $pending */
@@ -42,8 +42,8 @@ class DebouncedForwardToN8nJob implements ShouldQueue
 
         Cache::forget($this->cacheKey);
 
-        $url = (string) (getenv('N8N_WEBHOOK_URL') ?: env('N8N_WEBHOOK_URL', ''));
-        $secret = (string) (getenv('N8N_SECRET') ?: env('N8N_SECRET', ''));
+        $url = (string) config('services.n8n.webhook_url', '');
+        $secret = (string) config('services.n8n.secret', '');
         if ($url === '' || $secret === '') {
             Log::warning('n8n.webhook.missing_config');
             return;

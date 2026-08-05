@@ -17,8 +17,9 @@ function authHeader(User $user): array
 }
 
 test('attachment url endpoint returns public url and metadata', function () {
-    putenv('CLOUDFLARE_R2_URL=https://cdn.example.com');
-    $_ENV['CLOUDFLARE_R2_URL'] = 'https://cdn.example.com';
+    config([
+        'filesystems.disks.r2.url' => 'https://cdn.example.com',
+    ]);
 
     $division = Division::create([
         'name' => 'Teknis',
@@ -82,4 +83,3 @@ test('attachment url endpoint returns public url and metadata', function () {
             'size_bytes' => 123,
         ]);
 });
-

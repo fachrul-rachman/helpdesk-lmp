@@ -89,10 +89,10 @@ test('sla resolution reminder sent before deadline', function () {
         'sla_resolution_status' => 'running',
     ]);
 
-    putenv('META_WA_TOKEN=test-token');
-    putenv('META_WA_PHONE_NUMBER_ID=123');
-    $_ENV['META_WA_TOKEN'] = 'test-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = '123';
+    config([
+        'services.meta_whatsapp.token' => 'test-token',
+        'services.meta_whatsapp.phone_number_id' => '123',
+    ]);
 
     Http::fake([
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'x']]], 200),
@@ -150,10 +150,10 @@ test('sla resolution overdue status updated and not sent twice', function () {
         'sla_resolution_status' => 'running',
     ]);
 
-    putenv('META_WA_TOKEN=test-token');
-    putenv('META_WA_PHONE_NUMBER_ID=123');
-    $_ENV['META_WA_TOKEN'] = 'test-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = '123';
+    config([
+        'services.meta_whatsapp.token' => 'test-token',
+        'services.meta_whatsapp.phone_number_id' => '123',
+    ]);
 
     Http::fake([
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'x']]], 200),
@@ -201,10 +201,10 @@ test('pending auto close after 24 hours and reminder at 23 hours', function () {
         'sla_resolution_paused_at' => CarbonImmutable::parse('2026-01-05 10:00:00'),
     ]);
 
-    putenv('META_WA_TOKEN=test-token');
-    putenv('META_WA_PHONE_NUMBER_ID=123');
-    $_ENV['META_WA_TOKEN'] = 'test-token';
-    $_ENV['META_WA_PHONE_NUMBER_ID'] = '123';
+    config([
+        'services.meta_whatsapp.token' => 'test-token',
+        'services.meta_whatsapp.phone_number_id' => '123',
+    ]);
 
     Http::fake([
         'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'x']]], 200),
@@ -237,8 +237,9 @@ test('customer reply on pending reopens ticket', function () {
     ]);
     srSeedHours($division->id);
 
-    putenv('META_WA_APP_SECRET=test-secret');
-    $_ENV['META_WA_APP_SECRET'] = 'test-secret';
+    config([
+        'services.meta_whatsapp.app_secret' => 'test-secret',
+    ]);
 
     $customer = Customer::create(['phone_number' => '628999999999', 'name' => 'Andi']);
 

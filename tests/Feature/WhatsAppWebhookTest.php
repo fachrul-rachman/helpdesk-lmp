@@ -49,9 +49,13 @@ function signPayload(string $payload, string $secret): string
 }
 
 beforeEach(function () {
-    config(['queue.default' => 'sync']);
-    putenv('META_WA_APP_SECRET=test-secret');
-    $_ENV['META_WA_APP_SECRET'] = 'test-secret';
+    config([
+        'queue.default' => 'sync',
+        'broadcasting.default' => 'log',
+    ]);
+    config([
+        'services.meta_whatsapp.app_secret' => 'test-secret',
+    ]);
 });
 
 test('invalid meta signature rejected', function () {
@@ -72,10 +76,10 @@ test('invalid meta signature rejected', function () {
 });
 
 test('incoming message forwarded to n8n if no active ticket', function () {
-    putenv('N8N_WEBHOOK_URL=https://n8n.example.com/webhook/abc');
-    putenv('N8N_SECRET=n8n-secret');
-    $_ENV['N8N_WEBHOOK_URL'] = 'https://n8n.example.com/webhook/abc';
-    $_ENV['N8N_SECRET'] = 'n8n-secret';
+    config([
+        'services.n8n.webhook_url' => 'https://n8n.example.com/webhook/abc',
+        'services.n8n.secret' => 'n8n-secret',
+    ]);
 
     Http::fake([
         'https://n8n.example.com/*' => Http::response(['ok' => true], 200),
@@ -111,10 +115,10 @@ test('incoming message forwarded to n8n if no active ticket', function () {
 });
 
 test('incoming message not forwarded if active ticket exists', function () {
-    putenv('N8N_WEBHOOK_URL=https://n8n.example.com/webhook/abc');
-    putenv('N8N_SECRET=n8n-secret');
-    $_ENV['N8N_WEBHOOK_URL'] = 'https://n8n.example.com/webhook/abc';
-    $_ENV['N8N_SECRET'] = 'n8n-secret';
+    config([
+        'services.n8n.webhook_url' => 'https://n8n.example.com/webhook/abc',
+        'services.n8n.secret' => 'n8n-secret',
+    ]);
 
     Http::fake([
         'https://n8n.example.com/*' => Http::response(['ok' => true], 200),
@@ -169,10 +173,10 @@ test('incoming message not forwarded if active ticket exists', function () {
 });
 
 test('incoming message on on_progress forwarded to n8n with ticket context', function () {
-    putenv('N8N_WEBHOOK_URL=https://n8n.example.com/webhook/abc');
-    putenv('N8N_SECRET=n8n-secret');
-    $_ENV['N8N_WEBHOOK_URL'] = 'https://n8n.example.com/webhook/abc';
-    $_ENV['N8N_SECRET'] = 'n8n-secret';
+    config([
+        'services.n8n.webhook_url' => 'https://n8n.example.com/webhook/abc',
+        'services.n8n.secret' => 'n8n-secret',
+    ]);
 
     Http::fake([
         'https://n8n.example.com/*' => Http::response(['ok' => true], 200),
@@ -233,10 +237,10 @@ test('media downloaded from meta and uploaded to r2', function () {
     config(['queue.default' => 'sync']);
     Storage::fake('r2');
 
-    putenv('META_WA_TOKEN=meta-token');
-    putenv('META_WA_API_URL=https://graph.facebook.com/v18.0');
-    $_ENV['META_WA_TOKEN'] = 'meta-token';
-    $_ENV['META_WA_API_URL'] = 'https://graph.facebook.com/v18.0';
+    config([
+        'services.meta_whatsapp.token' => 'meta-token',
+        'services.meta_whatsapp.api_url' => 'https://graph.facebook.com/v18.0',
+    ]);
 
     Http::fake(function ($request) {
         $url = (string) $request->url();
@@ -353,4 +357,40 @@ test('delivery status webhook is logged', function () {
             && $message === 'whatsapp.status'
             && ($context['id'] ?? null) === 'wamid.out'
             && ($context['status'] ?? null) === 'failed');
+});
+
+test('whatsapp webhook still uses cached config values when env changes', function () {
+    config([
+        'services.meta_whatsapp.app_secret' => 'cached-secret',
+        'services.n8n.webhook_url' => 'https://n8n.example.com/webhook/cached',
+        'services.n8n.secret' => 'cached-n8n-secret',
+    ]);
+
+    putenv('META_WA_APP_SECRET=wrong-secret');
+    putenv('N8N_WEBHOOK_URL=https://wrong.example.com/webhook');
+    putenv('N8N_SECRET=wrong-n8n-secret');
+
+    Http::fake([
+        'https://n8n.example.com/*' => Http::response(['ok' => true], 200),
+        'https://wrong.example.com/*' => Http::response(['wrong' => true], 200),
+        'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
+    ]);
+
+    $payload = json_encode(metaEnvelope([
+        'id' => 'wamid.cached',
+        'from' => '628123456789',
+        'timestamp' => (string) time(),
+        'type' => 'text',
+        'text' => ['body' => 'Halo dari cached config'],
+    ]), JSON_UNESCAPED_SLASHES);
+
+    $signature = signPayload($payload, 'cached-secret');
+
+    $this->call('POST', '/api/webhook/whatsapp', [], [], [], [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_HUB_SIGNATURE_256' => $signature,
+    ], $payload)->assertOk();
+
+    Http::assertSent(fn ($request) => str_starts_with((string) $request->url(), 'https://n8n.example.com/webhook/cached')
+        && $request->hasHeader('Authorization', 'Bearer cached-n8n-secret'));
 });
