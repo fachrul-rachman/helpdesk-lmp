@@ -89,11 +89,14 @@ class DebouncedForwardToN8nJob implements ShouldQueue
             $payload['ticket'] = $pending['ticket'];
         }
 
+        $last = is_array($messages[array_key_last($messages)] ?? null) ? $messages[array_key_last($messages)] : $first;
+
         // Mark as read (+ typing_indicator jika didukung Meta) untuk pesan terakhir (best-effort).
-        $waMessageId = (string) ($first['id'] ?? '');
+        $waMessageId = (string) ($last['id'] ?? '');
+        $typingType = (string) ($last['type'] ?? $messageType);
         if ($waMessageId !== '') {
             try {
-                $notificationService->markAsRead($waMessageId, $messageType);
+                $notificationService->markAsRead($waMessageId, $typingType);
             } catch (\Throwable $e) {
                 // ignore
             }
