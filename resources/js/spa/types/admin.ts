@@ -4,6 +4,7 @@ export type AdminUserListItem = {
     phone_number: string;
     role: 'admin' | 'pic';
     division: { id: string; name: string } | null;
+    divisions: Array<{ id: string; name: string }>;
     is_active: boolean;
     created_at: string | null;
 };

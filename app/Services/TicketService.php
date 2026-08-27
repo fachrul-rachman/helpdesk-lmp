@@ -322,12 +322,12 @@ class TicketService
         }
 
         /** @var User|null $pic */
-        $pic = User::query()->where('role', 'pic')->where('is_active', true)->find($picUserId);
-        if (! $pic || ! $pic->division_id) {
-            throw new HttpException(422, 'User PIC tidak valid.');
-        }
-
-        if ((string) $pic->division_id !== (string) $ticket->division_id) {
+        $pic = User::query()
+            ->where('role', 'pic')
+            ->where('is_active', true)
+            ->inDivision((string) $ticket->division_id)
+            ->find($picUserId);
+        if (! $pic) {
             throw new HttpException(422, 'PIC harus berasal dari divisi yang sama dengan ticket.');
         }
 
@@ -392,8 +392,12 @@ class TicketService
                 $newAssignee = $spv?->id;
                 $shouldBroadcastAssigned = true;
             } elseif (is_string($assignedTo) && $assignedTo !== '') {
-                $pic = User::query()->where('role', 'pic')->where('is_active', true)->find($assignedTo);
-                if (! $pic || (string) $pic->division_id !== (string) $division->id) {
+                $pic = User::query()
+                    ->where('role', 'pic')
+                    ->where('is_active', true)
+                    ->inDivision((string) $division->id)
+                    ->find($assignedTo);
+                if (! $pic) {
                     throw new HttpException(422, 'PIC tidak valid untuk divisi tujuan.');
                 }
                 $newAssignee = $pic->id;

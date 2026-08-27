@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Customer;
 use App\Models\Division;
 use App\Models\Ticket;
 use App\Models\User;
@@ -13,13 +14,13 @@ function adminAuthHeader(): array
 {
     $admin = User::factory()->create([
         'role' => 'admin',
-        'phone_number' => '628' . fake()->unique()->numerify(str_repeat('#', 9)),
+        'phone_number' => '628'.fake()->unique()->numerify(str_repeat('#', 9)),
         'password' => Hash::make('admin123456'),
         'is_active' => true,
         'division_id' => null,
     ]);
 
-    return ['Authorization' => 'Bearer ' . JWTAuth::fromUser($admin)];
+    return ['Authorization' => 'Bearer '.JWTAuth::fromUser($admin)];
 }
 
 test('admin can create user', function () {
@@ -47,6 +48,42 @@ test('admin can create user', function () {
 
     $response->assertStatus(201)->assertJson(['message' => 'User berhasil dibuat.']);
     expect($division->fresh()->is_active)->toBeTrue();
+});
+
+test('admin can assign pic to multiple divisions', function () {
+    $divisions = collect(['Teknis', 'Billing'])->map(fn (string $name) => Division::create([
+        'name' => $name,
+        'description' => 'Desc',
+        'handles' => 'Handles',
+        'not_handles' => 'Not',
+        'ticket_examples' => 'Examples',
+        'sla_resolution_value' => 3,
+        'sla_resolution_unit' => 'days',
+        'sla_resolution_reminder_value' => 12,
+        'sla_resolution_reminder_unit' => 'hours',
+        'is_fallback' => false,
+        'is_active' => false,
+    ]));
+
+    $response = $this->postJson('/api/admin/users', [
+        'name' => 'Multi Divisi',
+        'phone_number' => '08123456788',
+        'role' => 'pic',
+        'division_ids' => $divisions->pluck('id')->all(),
+        'password' => 'tempPassword123',
+    ], adminAuthHeader());
+
+    $response->assertCreated();
+    $user = User::query()->where('phone_number', '628123456788')->firstOrFail();
+
+    expect($user->divisions()->pluck('divisions.id')->all())
+        ->toEqualCanonicalizing($divisions->pluck('id')->all());
+    expect($divisions->map->fresh()->every->is_active)->toBeTrue();
+
+    $this->getJson('/api/admin/users?division_id='.$divisions->last()->id, adminAuthHeader())
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $user->id)
+        ->assertJsonCount(2, 'data.0.divisions');
 });
 
 test('admin cannot create spv', function () {
@@ -92,7 +129,7 @@ test('deactivating last pic in division is hard blocked', function () {
         'is_active' => true,
     ]);
 
-    $response = $this->putJson('/api/admin/users/' . $pic->id, [
+    $response = $this->putJson('/api/admin/users/'.$pic->id, [
         'is_active' => false,
     ], adminAuthHeader());
 
@@ -120,7 +157,7 @@ test('cannot delete user with active tickets', function () {
         'is_active' => true,
     ]);
 
-    $customer = \App\Models\Customer::create([
+    $customer = Customer::create([
         'phone_number' => '628111111111',
         'name' => 'Andi',
     ]);
@@ -137,6 +174,6 @@ test('cannot delete user with active tickets', function () {
         'sla_resolution_status' => 'running',
     ]);
 
-    $response = $this->deleteJson('/api/admin/users/' . $pic->id, [], adminAuthHeader());
+    $response = $this->deleteJson('/api/admin/users/'.$pic->id, [], adminAuthHeader());
     $response->assertStatus(422);
 });

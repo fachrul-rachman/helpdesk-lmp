@@ -243,7 +243,7 @@ export function AdminUsersPage() {
                                                     {roleLabel(u.role)}
                                                 </span>
                                             </Td>
-                                            <Td>{u.division?.name ?? '-'}</Td>
+                                            <Td>{u.divisions.map((division) => division.name).join(', ') || '-'}</Td>
                                             <Td>
                                                 <span
                                                     className={
@@ -395,7 +395,9 @@ function UserFormModal({
     const [name, setName] = useState(user?.name ?? '');
     const [phoneNumber, setPhoneNumber] = useState(user?.phone_number ?? '');
     const [role, setRole] = useState<'admin' | 'pic'>(user?.role ?? 'pic');
-    const [divisionId, setDivisionId] = useState(user?.division?.id ?? '');
+    const [divisionIds, setDivisionIds] = useState<string[]>(
+        user?.divisions.map((division) => division.id) ?? [],
+    );
     const [isActive, setIsActive] = useState(user?.is_active ?? true);
     const [password, setPassword] = useState('');
 
@@ -415,14 +417,14 @@ function UserFormModal({
                                 name,
                                 phone_number: phoneNumber,
                                 role,
-                                division_id: role === 'pic' ? divisionId || null : null,
+                                division_ids: role === 'pic' ? divisionIds : [],
                                 password,
                             });
                         } else {
                             await api.put(`/api/admin/users/${user!.id}`, {
                                 name,
                                 phone_number: phoneNumber,
-                                division_id: role === 'pic' ? (divisionId || null) : null,
+                                division_ids: role === 'pic' ? divisionIds : [],
                                 is_active: isActive,
                             });
                         }
@@ -454,7 +456,7 @@ function UserFormModal({
                             onChange={(e) => {
                                 const value = e.target.value as 'admin' | 'pic';
                                 setRole(value);
-                                if (value === 'admin') setDivisionId('');
+                                if (value === 'admin') setDivisionIds([]);
                             }}
                             disabled={mode === 'edit'}
                         >
@@ -465,20 +467,28 @@ function UserFormModal({
                             <div className="text-xs text-slate-500">Role tidak dapat diubah.</div>
                         ) : null}
                     </div>
-                    <div className="space-y-1.5">
+                    <div className="space-y-1.5 lg:col-span-2">
                         <Label>Divisi (untuk PIC)</Label>
-                        <Select
-                            value={divisionId}
-                            onChange={(e) => setDivisionId(e.target.value)}
-                            disabled={role !== 'pic'}
-                        >
-                            <option value="">-</option>
+                        <div className="grid gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-2">
                             {divisions.map((d) => (
-                                <option key={d.id} value={d.id}>
+                                <label key={d.id} className="flex items-center gap-2 text-sm text-slate-700">
+                                    <input
+                                        type="checkbox"
+                                        checked={divisionIds.includes(d.id)}
+                                        onChange={(event) =>
+                                            setDivisionIds((current) =>
+                                                event.target.checked
+                                                    ? [...current, d.id]
+                                                    : current.filter((id) => id !== d.id),
+                                            )
+                                        }
+                                        disabled={role !== 'pic'}
+                                        className="h-4 w-4 rounded border-slate-300"
+                                    />
                                     {d.name}
-                                </option>
+                                </label>
                             ))}
-                        </Select>
+                        </div>
                     </div>
                     {mode === 'create' ? (
                         <div className="space-y-1.5 lg:col-span-2">

@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 
 import { PriorityBadge, StatusBadge } from '../../components/common/badges';
-import { formatDateTimeId, formatTimeId } from '../../components/common/format';
+import { ChatDateSeparator } from '../../components/common/ChatDateSeparator';
+import { formatDateId, formatDateTimeId, formatTimeId } from '../../components/common/format';
 import { PaperclipIcon } from '../../components/common/icons';
 import { Button } from '../../components/ui/button';
 import { api } from '../../lib/axios';
@@ -216,9 +217,14 @@ export function SpvConversationDetailPage() {
                                 Belum ada pesan.
                             </div>
                         ) : (
-                            detail.messages.map((message) => (
+                            detail.messages.map((message, index) => (
+                                <Fragment key={message.id}>
+                                    {index === 0 ||
+                                    formatDateId(detail.messages[index - 1].created_at) !==
+                                        formatDateId(message.created_at) ? (
+                                        <ChatDateSeparator date={message.created_at} />
+                                    ) : null}
                                 <div
-                                    key={message.id}
                                     className={cn(
                                         'flex flex-col',
                                         bubbleAlign(message.sender_type),
@@ -349,6 +355,7 @@ export function SpvConversationDetailPage() {
                                         </div>
                                     </div>
                                 </div>
+                                </Fragment>
                             ))
                         )}
                         <div ref={bottomRef} />

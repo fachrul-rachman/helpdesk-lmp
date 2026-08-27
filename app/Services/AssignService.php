@@ -6,8 +6,8 @@ use App\Events\TicketAssigned;
 use App\Models\Division;
 use App\Models\Ticket;
 use App\Models\User;
-use Illuminate\Support\Facades\Log;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class AssignService
@@ -15,14 +15,13 @@ class AssignService
     public function __construct(
         private readonly NotificationService $notificationService,
         private readonly TicketTakeoverRequestService $takeoverRequestService,
-    ) {
-    }
+    ) {}
 
     public function autoAssign(Ticket $ticket): ?User
     {
         /** @var Division|null $division */
         $division = Division::query()->find($ticket->division_id);
-        if (!$division) {
+        if (! $division) {
             throw new HttpException(404, 'Divisi tidak ditemukan.');
         }
 
@@ -30,14 +29,15 @@ class AssignService
             return null;
         }
 
-        if (!$division->is_active) {
+        if (! $division->is_active) {
             $this->redirectToFallback($ticket, 'division_inactive');
+
             return null;
         }
 
         $candidatePics = User::query()
             ->where('role', 'pic')
-            ->where('division_id', $division->id)
+            ->inDivision($division->id)
             ->where('is_active', true)
             ->pluck('id')
             ->all();
@@ -45,6 +45,7 @@ class AssignService
         if (count($candidatePics) === 0) {
             Log::warning('assign.no_pic_in_division', ['ticket_id' => $ticket->id, 'division_id' => $division->id]);
             $this->redirectToFallback($ticket, 'no_pic_in_division');
+
             return null;
         }
 
@@ -62,6 +63,7 @@ class AssignService
             if ($minCount === null || $cnt < $minCount) {
                 $minCount = $cnt;
                 $best = [$picId];
+
                 continue;
             }
             if ($cnt === $minCount) {
@@ -77,7 +79,7 @@ class AssignService
 
         /** @var User|null $picked */
         $picked = User::query()->find($pickedId);
-        if (!$picked) {
+        if (! $picked) {
             return null;
         }
 
@@ -100,7 +102,7 @@ class AssignService
         return $picked;
     }
 
-    public function reassignFromUser(User $user): void
+    public function reassignFromUser(User $user, ?array $onlyDivisionIds = null): void
     {
         if ($user->role !== 'pic') {
             return;
@@ -109,25 +111,27 @@ class AssignService
         $tickets = Ticket::query()
             ->where('assigned_to', $user->id)
             ->whereIn('status', ['new', 'open', 'pending', 'on_progress'])
+            ->when($onlyDivisionIds, fn ($query) => $query->whereIn('division_id', $onlyDivisionIds))
             ->get();
 
-        $divisionIds = [];
+        $affectedDivisionIds = [];
 
         foreach ($tickets as $ticket) {
-            $divisionIds[] = (string) $ticket->division_id;
+            $affectedDivisionIds[] = (string) $ticket->division_id;
 
             // Pastikan divisi aktif; jika tidak, redirect fallback.
             $division = Division::query()->find($ticket->division_id);
-            if ($division && !$division->is_fallback && !$division->is_active) {
+            if ($division && ! $division->is_fallback && ! $division->is_active) {
                 $this->redirectToFallback($ticket, 'division_inactive');
+
                 continue;
             }
 
             // Assign ulang ke PIC lain di divisi yang sama (exclude user ini).
-            if ($division && !$division->is_fallback) {
+            if ($division && ! $division->is_fallback) {
                 $candidatePics = User::query()
                     ->where('role', 'pic')
-                    ->where('division_id', $division->id)
+                    ->inDivision($division->id)
                     ->where('is_active', true)
                     ->where('id', '!=', $user->id)
                     ->pluck('id')
@@ -135,6 +139,7 @@ class AssignService
 
                 if (count($candidatePics) === 0) {
                     $this->redirectToFallback($ticket, 'no_pic_in_division');
+
                     continue;
                 }
 
@@ -152,6 +157,7 @@ class AssignService
                     if ($minCount === null || $cnt < $minCount) {
                         $minCount = $cnt;
                         $best = [$picId];
+
                         continue;
                     }
                     if ($cnt === $minCount) {
@@ -164,6 +170,7 @@ class AssignService
                 if ($pickedId === '') {
                     $ticket->assigned_to = null;
                     $ticket->save();
+
                     continue;
                 }
 
@@ -188,7 +195,7 @@ class AssignService
             }
         }
 
-        foreach (array_unique($divisionIds) as $divisionId) {
+        foreach (array_unique($affectedDivisionIds) as $divisionId) {
             $this->syncDivisionIsActive($divisionId);
         }
     }
@@ -197,7 +204,7 @@ class AssignService
     {
         /** @var Division|null $fallback */
         $fallback = Division::query()->where('is_fallback', true)->first();
-        if (!$fallback) {
+        if (! $fallback) {
             throw new HttpException(500, 'Terjadi kesalahan pada server.');
         }
 
@@ -236,18 +243,19 @@ class AssignService
     private function syncDivisionIsActive(string $divisionId): void
     {
         $division = Division::query()->select(['id', 'is_fallback'])->find($divisionId);
-        if (!$division) {
+        if (! $division) {
             return;
         }
 
         if ($division->is_fallback) {
             Division::query()->where('id', $divisionId)->update(['is_active' => true]);
+
             return;
         }
 
         $hasActivePic = User::query()
             ->where('role', 'pic')
-            ->where('division_id', $divisionId)
+            ->inDivision($divisionId)
             ->where('is_active', true)
             ->exists();
 

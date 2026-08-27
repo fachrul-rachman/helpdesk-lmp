@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Division;
 use App\Models\DivisionWorkingHour;
 use App\Models\Ticket;
-use App\Models\User;
 use App\Support\AuditLogger;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -18,19 +17,14 @@ class DivisionController extends Controller
     {
         $divisions = Division::query()
             ->with(['workingHours'])
+            ->withCount(['users as pic_count' => fn ($query) => $query
+                ->where('role', 'pic')
+                ->where('is_active', true)])
             ->orderBy('name')
             ->get();
 
-        $picCounts = User::query()
-            ->selectRaw('division_id, COUNT(*) as cnt')
-            ->where('role', 'pic')
-            ->where('is_active', true)
-            ->whereNotNull('division_id')
-            ->groupBy('division_id')
-            ->pluck('cnt', 'division_id');
-
         return response()->json([
-            'data' => $divisions->map(function (Division $division) use ($picCounts) {
+            'data' => $divisions->map(function (Division $division) {
                 return [
                     'id' => $division->id,
                     'name' => $division->name,
@@ -44,7 +38,7 @@ class DivisionController extends Controller
                     'sla_resolution_reminder_unit' => $division->sla_resolution_reminder_unit,
                     'is_fallback' => $division->is_fallback,
                     'is_active' => $division->is_active,
-                    'pic_count' => (int) ($picCounts[$division->id] ?? 0),
+                    'pic_count' => (int) $division->pic_count,
                     'working_hours' => $division->workingHours
                         ->sortBy(fn (DivisionWorkingHour $wh) => $this->dayIndex($wh->day_of_week))
                         ->values()
@@ -64,7 +58,7 @@ class DivisionController extends Controller
     {
         $data = $this->validateDivision($request);
 
-        if (!empty($data['is_fallback']) && Division::query()->where('is_fallback', true)->exists()) {
+        if (! empty($data['is_fallback']) && Division::query()->where('is_fallback', true)->exists()) {
             return response()->json(['message' => 'Sudah ada divisi fallback. Hanya boleh ada 1 divisi fallback.'], 422);
         }
 
@@ -91,7 +85,7 @@ class DivisionController extends Controller
     {
         /** @var Division|null $division */
         $division = Division::query()->with('workingHours')->find($id);
-        if (!$division) {
+        if (! $division) {
             return response()->json(['message' => 'Divisi tidak ditemukan.'], 404);
         }
 
@@ -99,7 +93,7 @@ class DivisionController extends Controller
 
         $data = $this->validateDivision($request);
 
-        if (!empty($data['is_fallback']) && !$division->is_fallback) {
+        if (! empty($data['is_fallback']) && ! $division->is_fallback) {
             if (Division::query()->where('is_fallback', true)->where('id', '!=', $division->id)->exists()) {
                 return response()->json(['message' => 'Sudah ada divisi fallback. Hanya boleh ada 1 divisi fallback.'], 422);
             }
@@ -129,7 +123,7 @@ class DivisionController extends Controller
     {
         /** @var Division|null $division */
         $division = Division::query()->find($id);
-        if (!$division) {
+        if (! $division) {
             return response()->json(['message' => 'Divisi tidak ditemukan.'], 404);
         }
 
@@ -179,7 +173,7 @@ class DivisionController extends Controller
             'working_hours.size' => 'working_hours harus berisi tepat 7 hari.',
         ]);
 
-        if (!isset($data['working_hours'])) {
+        if (! isset($data['working_hours'])) {
             $data['working_hours'] = [
                 ['day_of_week' => 'monday', 'start_time' => '08:00', 'end_time' => '17:00', 'is_active' => true],
                 ['day_of_week' => 'tuesday', 'start_time' => '08:00', 'end_time' => '17:00', 'is_active' => true],

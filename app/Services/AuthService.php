@@ -24,11 +24,11 @@ class AuthService
             ->where('phone_number', $normalizedPhone)
             ->first();
 
-        if (!$user || !Hash::check($password, $user->password)) {
+        if (! $user || ! Hash::check($password, $user->password)) {
             throw new HttpException(401, 'Nomor HP atau password salah.');
         }
 
-        if (!$user->is_active) {
+        if (! $user->is_active) {
             throw new HttpException(401, 'Akun Anda tidak aktif. Hubungi admin.');
         }
 
@@ -56,6 +56,12 @@ class AuthService
                 'name' => $user->name,
                 'role' => $user->role,
                 'division_id' => $user->division_id,
+                'division_ids' => collect([$user->division_id])
+                    ->merge($user->divisions()->pluck('divisions.id'))
+                    ->filter()
+                    ->unique()
+                    ->values()
+                    ->all(),
             ],
         ];
     }
@@ -70,14 +76,14 @@ class AuthService
             ->whereNull('revoked_at')
             ->first();
 
-        if (!$record || $record->expires_at->isPast()) {
+        if (! $record || $record->expires_at->isPast()) {
             throw new HttpException(401, 'Refresh token tidak valid atau sudah kadaluarsa.');
         }
 
         /** @var User|null $user */
         $user = User::query()->find($record->user_id);
 
-        if (!$user || !$user->is_active) {
+        if (! $user || ! $user->is_active) {
             throw new HttpException(401, 'Refresh token tidak valid atau sudah kadaluarsa.');
         }
 
@@ -115,7 +121,7 @@ class AuthService
 
     public function changePassword(User $user, string $currentPassword, string $newPassword, ?string $ipAddress = null): void
     {
-        if (!Hash::check($currentPassword, $user->password)) {
+        if (! Hash::check($currentPassword, $user->password)) {
             throw new HttpException(422, 'Password lama tidak sesuai.');
         }
 
@@ -156,7 +162,7 @@ class AuthService
         /** @var User|null $target */
         $target = User::query()->find($targetUserId);
 
-        if (!$target) {
+        if (! $target) {
             throw new HttpException(404, 'User tidak ditemukan.');
         }
 
@@ -182,6 +188,7 @@ class AuthService
 
         try {
             JWTAuth::factory()->setTTL($ttlMinutes);
+
             return JWTAuth::fromUser($user);
         } catch (JWTException $e) {
             throw new HttpException(500, 'Terjadi kesalahan pada server.');

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { formatDateTimeId } from '../../components/common/format';
+import { formatDateTimeId, formatSlaMinutes } from '../../components/common/format';
 import { Button } from '../../components/ui/button';
 import { api } from '../../lib/axios';
 import { getEcho } from '../../lib/echo';
@@ -120,14 +120,16 @@ export function SpvDashboardPage() {
                 <div className="rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
                     <div className="text-sm font-semibold text-slate-900">Rata-rata SLA First Respond</div>
                     <div className="mt-2 text-2xl font-bold text-slate-900">
-                        {data.sla_fr.average_minutes_overall} menit
+                        {formatSlaMinutes(data.sla_fr.average_minutes_overall)}
                     </div>
                     {data.sla_fr.per_division.length ? (
                         <div className="mt-3 space-y-2">
                             {data.sla_fr.per_division.map((row) => (
                                 <div key={row.division_id} className="flex items-center justify-between text-sm">
                                     <div className="text-slate-700">{row.division_name}</div>
-                                    <div className="font-semibold text-slate-900">{row.average_minutes} menit</div>
+                                    <div className="font-semibold text-slate-900">
+                                        {formatSlaMinutes(row.average_minutes)}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -139,4 +141,3 @@ export function SpvDashboardPage() {
         </div>
     );
 }
-

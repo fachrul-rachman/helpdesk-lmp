@@ -5,6 +5,7 @@ export type AuthUser = {
     name: string;
     role: UserRole;
     division_id: string | null;
+    division_ids: string[];
 };
 
 export type LoginResponse = {
@@ -14,4 +15,3 @@ export type LoginResponse = {
     expires_in: number;
     user: AuthUser;
 };
-

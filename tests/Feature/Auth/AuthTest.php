@@ -35,7 +35,7 @@ test('login returns tokens', function () {
             'refresh_token',
             'token_type',
             'expires_in',
-            'user' => ['id', 'name', 'role', 'division_id'],
+            'user' => ['id', 'name', 'role', 'division_id', 'division_ids'],
         ]);
 
     expect(RefreshToken::count())->toBe(1);
@@ -113,7 +113,7 @@ test('logout revokes refresh token', function () {
     $response = $this->postJson(
         '/api/auth/logout',
         ['refresh_token' => $login['refresh_token']],
-        ['Authorization' => 'Bearer ' . $login['access_token']],
+        ['Authorization' => 'Bearer '.$login['access_token']],
     );
 
     $response->assertOk()->assertJson(['message' => 'Berhasil logout.']);
@@ -142,7 +142,7 @@ test('change password revokes all sessions', function () {
             'new_password' => 'newSecret456',
             'new_password_confirmation' => 'newSecret456',
         ],
-        ['Authorization' => 'Bearer ' . $login['access_token']],
+        ['Authorization' => 'Bearer '.$login['access_token']],
     );
 
     $response->assertOk()->assertJson(['message' => 'Password berhasil diubah.']);
@@ -172,12 +172,11 @@ test('force logout by admin', function () {
     ])->assertOk()->json();
 
     $response = $this->postJson(
-        '/api/auth/force-logout/' . $target->id,
+        '/api/auth/force-logout/'.$target->id,
         [],
-        ['Authorization' => 'Bearer ' . $adminLogin['access_token']],
+        ['Authorization' => 'Bearer '.$adminLogin['access_token']],
     );
 
     $response->assertOk()->assertJson(['message' => 'Semua sesi user berhasil dihentikan.']);
     expect(RefreshToken::where('user_id', $target->id)->whereNull('revoked_at')->count())->toBe(0);
 });
-

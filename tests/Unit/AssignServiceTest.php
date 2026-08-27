@@ -90,6 +90,32 @@ test('autoAssign memilih PIC dengan beban terendah', function () {
     expect($ticket->fresh()->assigned_to)->toBe($picLow->id);
 });
 
+test('autoAssign memilih PIC dari relasi multi divisi', function () {
+    $division = asDivision();
+    $pic = User::factory()->create([
+        'role' => 'pic',
+        'division_id' => null,
+        'password' => Hash::make('secret123'),
+        'is_active' => true,
+    ]);
+    $pic->divisions()->attach($division);
+
+    $customer = Customer::create(['phone_number' => '6281110000001', 'name' => 'Andi']);
+    $ticket = Ticket::create([
+        'customer_id' => $customer->id,
+        'division_id' => $division->id,
+        'assigned_to' => null,
+        'created_by' => 'ai',
+        'priority' => 'high',
+        'status' => 'new',
+        'subject' => 'Multi divisi',
+        'sla_fr_status' => 'running',
+        'sla_resolution_status' => 'waiting',
+    ]);
+
+    expect(app(AssignService::class)->autoAssign($ticket)?->id)->toBe($pic->id);
+});
+
 test('autoAssign redirect ke fallback jika divisi inactive', function () {
     $division = asDivision(['is_active' => false]);
     $fallback = asDivision(['is_fallback' => true, 'is_active' => true, 'name' => 'Fallback']);

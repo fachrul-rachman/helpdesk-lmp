@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 
 import { PriorityBadge, StatusBadge, type TicketStatus } from '../../components/common/badges';
-import { formatDateTimeId, formatTimeId } from '../../components/common/format';
+import { ChatDateSeparator } from '../../components/common/ChatDateSeparator';
+import { formatDateId, formatDateTimeId, formatSlaRemaining, formatTimeId } from '../../components/common/format';
 import { PaperclipIcon, SendIcon } from '../../components/common/icons';
 import { Button } from '../../components/ui/button';
 import { Textarea } from '../../components/ui/textarea';
@@ -14,28 +15,6 @@ import type { TicketDetail, TicketMessage } from '../../types/ticket';
 
 type TicketDetailResponse = { data: TicketDetail };
 type MessagesResponse = { data: TicketMessage[] };
-
-function formatRemaining(deadlineIso: string | null | undefined) {
-    if (!deadlineIso) return { label: '-', tone: 'muted' as const };
-    const deadline = new Date(deadlineIso);
-    if (Number.isNaN(deadline.getTime())) return { label: '-', tone: 'muted' as const };
-
-    const now = Date.now();
-    const diffMs = deadline.getTime() - now;
-    const isOverdue = diffMs < 0;
-    const absMs = Math.abs(diffMs);
-    const totalMinutes = Math.floor(absMs / 60000);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    const parts: string[] = [];
-    if (hours > 0) parts.push(`${hours} jam`);
-    parts.push(`${minutes} menit`);
-
-    return {
-        label: `${isOverdue ? 'Overdue' : 'Sisa'} ${parts.join(' ')}`,
-        tone: isOverdue ? ('danger' as const) : ('ok' as const),
-    };
-}
 
 function bubbleAlign(senderType: TicketMessage['sender_type']) {
     return senderType === 'customer' ? 'items-start' : 'items-end';
@@ -362,7 +341,7 @@ export function PicTicketDetailPage() {
         );
     }
 
-    const resolution = formatRemaining(ticket.sla?.resolution_deadline_at);
+    const resolution = formatSlaRemaining(ticket.sla?.resolution_deadline_at);
     const frTone =
         ticket.sla?.fr_status === 'overdue'
             ? 'danger'
@@ -394,8 +373,13 @@ export function PicTicketDetailPage() {
                     {messages.length === 0 ? (
                         <div className="text-sm text-slate-600">Belum ada pesan.</div>
                     ) : (
-                        messages.map((m) => (
-                            <div key={m.id} className={cn('flex flex-col', bubbleAlign(m.sender_type))}>
+                        messages.map((m, index) => (
+                            <Fragment key={m.id}>
+                                {index === 0 ||
+                                formatDateId(messages[index - 1].created_at) !== formatDateId(m.created_at) ? (
+                                    <ChatDateSeparator date={m.created_at} />
+                                ) : null}
+                                <div className={cn('flex flex-col', bubbleAlign(m.sender_type))}>
                                 <div className="mb-1 text-[11px] font-medium text-slate-500">
                                     {m.sender?.name ?? senderLabel(m.sender_type)}
                                 </div>
@@ -448,7 +432,8 @@ export function PicTicketDetailPage() {
                                         {formatTimeId(m.created_at)}
                                     </div>
                                 </div>
-                            </div>
+                                </div>
+                            </Fragment>
                         ))
                     )}
                     <div ref={bottomRef} />

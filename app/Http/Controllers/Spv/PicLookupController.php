@@ -12,7 +12,7 @@ class PicLookupController extends Controller
     public function __invoke(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             throw new HttpException(401, 'Token tidak valid.');
         }
         if ((string) ($user->role ?? '') !== 'spv') {
@@ -26,7 +26,7 @@ class PicLookupController extends Controller
         $pics = User::query()
             ->where('role', 'pic')
             ->where('is_active', true)
-            ->where('division_id', (string) $validated['division_id'])
+            ->inDivision((string) $validated['division_id'])
             ->orderBy('name')
             ->get()
             ->map(fn (User $u) => [
@@ -39,4 +39,3 @@ class PicLookupController extends Controller
         return response()->json(['data' => $pics]);
     }
 }
-
