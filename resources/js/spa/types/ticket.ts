@@ -19,16 +19,28 @@ export type Customer = {
     deleted: boolean;
 };
 
+export type TicketSubcategory = { id: string; name: string };
+
+export type TicketSubcategoryOptions = {
+    global: Array<TicketSubcategory & { division_id: null }>;
+    division: Array<TicketSubcategory & { division_id: string }>;
+};
+
 export type TicketListItem = {
     id: string;
     ticket_number?: string | null;
     subject: string;
     status: TicketStatus;
     priority: TicketPriority;
+    site: string | null;
+    zone: string | null;
+    lot_number: string | null;
     has_takeover_request?: boolean;
     takeover_request_status?: 'pending' | 'approved' | null;
     customer: Customer;
     division: { id: string; name: string } | null;
+    global_subcategory: TicketSubcategory | null;
+    division_subcategory: TicketSubcategory | null;
     assigned_to: { id: string; name: string } | null;
     sla_fr_status: string | null;
     sla_resolution_status: string | null;
@@ -43,6 +55,9 @@ export type TicketDetail = {
     status: TicketStatus;
     priority: TicketPriority;
     notes: string | null;
+    site: string | null;
+    zone: string | null;
+    lot_number: string | null;
     takeover_request?: {
         id: string;
         status: 'pending' | 'approved';
@@ -53,6 +68,8 @@ export type TicketDetail = {
     } | null;
     customer: Customer;
     division: { id: string; name: string } | null;
+    global_subcategory: TicketSubcategory | null;
+    division_subcategory: TicketSubcategory | null;
     assigned_to: { id: string; name: string; role: string } | null;
     created_by: string | null;
     ai_confidence: number | null;

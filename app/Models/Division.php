@@ -48,4 +48,9 @@ class Division extends Model
     {
         return $this->belongsToMany(User::class);
     }
+
+    public function subcategories(): HasMany
+    {
+        return $this->hasMany(TicketSubcategory::class);
+    }
 }

@@ -77,7 +77,7 @@ api.interceptors.response.use(
             return api(originalConfig);
         } catch (refreshError) {
             refreshPromise = null;
-            useAuthStore.getState().clear();
+            await useAuthStore.getState().clear();
             redirectToLogin();
             return Promise.reject(refreshError);
         }

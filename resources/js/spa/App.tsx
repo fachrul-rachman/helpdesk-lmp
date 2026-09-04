@@ -11,6 +11,7 @@ import { AdminDivisionsPage } from './features/admin/AdminDivisionsPage';
 import { AdminSettingsPage } from './features/admin/AdminSettingsPage';
 import { AdminAuditLogsPage } from './features/admin/AdminAuditLogsPage';
 import { AdminMetaTemplatesPage } from './features/admin/AdminMetaTemplatesPage';
+import { AdminTicketSubcategoriesPage } from './features/admin/AdminTicketSubcategoriesPage';
 import { NotFoundPage } from './features/common/NotFoundPage';
 import { PicLayout } from './features/pic/PicLayout';
 import { PicTicketsListPage } from './features/pic/PicTicketsListPage';
@@ -46,6 +47,7 @@ export function App() {
                             <Route index element={<Navigate to="/admin/users" replace />} />
                             <Route path="users" element={<AdminUsersPage />} />
                             <Route path="divisions" element={<AdminDivisionsPage />} />
+                            <Route path="ticket-subcategories" element={<AdminTicketSubcategoriesPage />} />
                             <Route path="settings" element={<AdminSettingsPage />} />
                             <Route path="meta-templates" element={<AdminMetaTemplatesPage />} />
                             <Route path="audit-logs" element={<AdminAuditLogsPage />} />

@@ -26,6 +26,11 @@ class TicketController extends Controller
             'subject' => ['required', 'string', 'max:500'],
             'priority' => ['required', 'in:low,medium,high'],
             'notes' => ['nullable', 'string', 'max:5000'],
+            'global_subcategory_id' => ['nullable', 'uuid', 'exists:ticket_subcategories,id'],
+            'division_subcategory_id' => ['nullable', 'uuid', 'exists:ticket_subcategories,id'],
+            'site' => ['nullable', 'string', 'max:255'],
+            'zone' => ['nullable', 'string', 'max:255'],
+            'lot_number' => ['nullable', 'string', 'max:255'],
         ]);
 
         $ticket = $this->ticketService->createManualTicket($user, $validated);
@@ -102,4 +107,3 @@ class TicketController extends Controller
         ]);
     }
 }
-

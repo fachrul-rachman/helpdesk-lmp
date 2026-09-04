@@ -13,6 +13,7 @@ use App\Models\Division;
 use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\Ticket;
+use App\Models\TicketSubcategory;
 use App\Models\TicketTakeoverRequest;
 use App\Models\User;
 use App\Support\AuditLogger;
@@ -108,6 +109,11 @@ class TicketService
         $ticket = Ticket::create([
             'customer_id' => $customer->id,
             'division_id' => $division->id,
+            'global_subcategory_id' => $this->subcategoryId($ticketData['global_subcategory_id'] ?? null, null, false),
+            'division_subcategory_id' => $this->subcategoryId($ticketData['division_subcategory_id'] ?? null, (string) $division->id, false),
+            'site' => $this->nullableTicketText($ticketData['site'] ?? null, 'site'),
+            'zone' => $this->nullableTicketText($ticketData['zone'] ?? null, 'zone'),
+            'lot_number' => $this->nullableTicketText($ticketData['lot_number'] ?? null, 'lot_number'),
             'assigned_to' => $assignedTo,
             'created_by' => 'ai',
             'priority' => $priority,
@@ -172,6 +178,8 @@ class TicketService
             'customer' => fn ($q) => $q->withTrashed(),
             'division',
             'assignee' => fn ($q) => $q->withTrashed(),
+            'globalSubcategory',
+            'divisionSubcategory',
             'takeoverRequest',
         ]);
 
@@ -290,7 +298,7 @@ class TicketService
 
         /** @var Ticket|null $ticket */
         $ticket = Ticket::query()
-            ->with(['customer' => fn ($q) => $q->withTrashed(), 'division', 'assignee' => fn ($q) => $q->withTrashed()])
+            ->with(['customer' => fn ($q) => $q->withTrashed(), 'division', 'assignee' => fn ($q) => $q->withTrashed(), 'globalSubcategory', 'divisionSubcategory'])
             ->find($ticketId);
         if (! $ticket) {
             throw new HttpException(404, 'Ticket tidak ditemukan.');
@@ -315,7 +323,7 @@ class TicketService
 
         /** @var Ticket|null $ticket */
         $ticket = Ticket::query()
-            ->with(['customer' => fn ($q) => $q->withTrashed(), 'division', 'assignee' => fn ($q) => $q->withTrashed()])
+            ->with(['customer' => fn ($q) => $q->withTrashed(), 'division', 'assignee' => fn ($q) => $q->withTrashed(), 'globalSubcategory', 'divisionSubcategory'])
             ->find($ticketId);
         if (! $ticket) {
             throw new HttpException(404, 'Ticket tidak ditemukan.');
@@ -377,6 +385,9 @@ class TicketService
         }
 
         return DB::transaction(function () use ($actor, $ticket, $division, $assignedTo): Ticket {
+            if ((string) $ticket->division_id !== (string) $division->id) {
+                $ticket->division_subcategory_id = null;
+            }
             $ticket->division_id = $division->id;
             $ticket->save();
 
@@ -456,6 +467,103 @@ class TicketService
         return $ticket->fresh(['customer' => fn ($q) => $q->withTrashed(), 'division', 'assignee' => fn ($q) => $q->withTrashed()]) ?? $ticket;
     }
 
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public function updateSubcategories(User $actor, string $ticketId, array $payload): Ticket
+    {
+        if (! in_array($actor->role, ['pic', 'spv'], true)) {
+            throw new HttpException(403, 'Anda tidak memiliki akses ke halaman ini.');
+        }
+
+        $ticket = $this->getTicketForUserOrFail($actor, $ticketId);
+
+        if (array_key_exists('global_subcategory_id', $payload)) {
+            $requestedId = $payload['global_subcategory_id'];
+            if ((string) ($requestedId ?? '') !== (string) ($ticket->global_subcategory_id ?? '')) {
+                $ticket->global_subcategory_id = $this->subcategoryId($requestedId, null, true);
+            }
+        }
+        if (array_key_exists('division_subcategory_id', $payload)) {
+            $requestedId = $payload['division_subcategory_id'];
+            if ((string) ($requestedId ?? '') !== (string) ($ticket->division_subcategory_id ?? '')) {
+                $ticket->division_subcategory_id = $this->subcategoryId(
+                    $requestedId,
+                    (string) $ticket->division_id,
+                    true,
+                );
+            }
+        }
+
+        $ticket->save();
+        AuditLogger::log('ticket.subcategories_updated', $ticket, [
+            'global_subcategory_id' => $ticket->global_subcategory_id,
+            'division_subcategory_id' => $ticket->division_subcategory_id,
+        ], $actor);
+
+        return $ticket->fresh([
+            'customer' => fn ($q) => $q->withTrashed(),
+            'division',
+            'assignee' => fn ($q) => $q->withTrashed(),
+            'globalSubcategory',
+            'divisionSubcategory',
+        ]) ?? $ticket;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    public function updateLocation(User $actor, string $ticketId, array $payload): Ticket
+    {
+        if (! in_array($actor->role, ['pic', 'spv'], true)) {
+            throw new HttpException(403, 'Anda tidak memiliki akses ke halaman ini.');
+        }
+
+        $ticket = $this->getTicketForUserOrFail($actor, $ticketId);
+        foreach (['site', 'zone', 'lot_number'] as $field) {
+            if (array_key_exists($field, $payload)) {
+                $ticket->{$field} = $this->nullableTicketText($payload[$field], $field);
+            }
+        }
+        $ticket->save();
+
+        AuditLogger::log('ticket.location_updated', $ticket, [
+            'site' => $ticket->site,
+            'zone' => $ticket->zone,
+            'lot_number' => $ticket->lot_number,
+        ], $actor);
+
+        return $ticket->fresh([
+            'customer' => fn ($q) => $q->withTrashed(),
+            'division',
+            'assignee' => fn ($q) => $q->withTrashed(),
+        ]) ?? $ticket;
+    }
+
+    public function updateSubject(User $actor, string $ticketId, string $subject): Ticket
+    {
+        if (! in_array($actor->role, ['pic', 'spv'], true)) {
+            throw new HttpException(403, 'Anda tidak memiliki akses ke halaman ini.');
+        }
+
+        $subject = trim($subject);
+        if ($subject === '') {
+            throw new HttpException(422, 'Judul ticket wajib diisi.');
+        }
+
+        $ticket = $this->getTicketForUserOrFail($actor, $ticketId);
+        $ticket->subject = $subject;
+        $ticket->save();
+
+        AuditLogger::log('ticket.subject_updated', $ticket, ['subject' => $subject], $actor);
+
+        return $ticket->fresh([
+            'customer' => fn ($q) => $q->withTrashed(),
+            'division',
+            'assignee' => fn ($q) => $q->withTrashed(),
+        ]) ?? $ticket;
+    }
+
     public function updateCustomerNotes(User $actor, string $customerId, ?string $notes): Customer
     {
         /** @var Customer|null $customer */
@@ -486,22 +594,24 @@ class TicketService
             ->orderBy('created_at')
             ->get();
 
-        // Sertakan riwayat percakapan customer <-> AI (ticket_id NULL) agar PIC/SPV bisa melihat konteks.
-        // Default: ambil 7 hari ke belakang dari waktu ticket dibuat supaya tidak menarik seluruh history lama.
-        $historyDays = 7;
+        // Sertakan riwayat percakapan customer dari luar ticket ini agar PIC/SPV bisa melihat konteks.
+        // Ambil satu tahun ke belakang dari waktu ticket dibuat supaya konteks lama tetap tersedia.
         $cutoffStart = $ticket->created_at
-            ? CarbonImmutable::parse($ticket->created_at)->subDays($historyDays)
-            : CarbonImmutable::now()->subDays($historyDays);
+            ? CarbonImmutable::parse($ticket->created_at)->subYear()
+            : CarbonImmutable::now()->subYear();
 
         $cutoffEnd = null;
         if ($user->role === 'pic') {
             $cutoffEnd = $ticket->closed_at ?: $ticket->solved_at;
         }
 
-        /** @var Collection<int, Message> $aiConversationMessages */
-        $aiConversationMessages = Message::query()
-            ->whereNull('ticket_id')
+        /** @var Collection<int, Message> $customerHistoryMessages */
+        $customerHistoryMessages = Message::query()
             ->where('customer_id', $ticket->customer_id)
+            ->where(function (Builder $query) use ($ticket): void {
+                $query->whereNull('ticket_id')
+                    ->orWhere('ticket_id', '!=', $ticket->id);
+            })
             ->where('created_at', '>=', $cutoffStart)
             ->when($cutoffEnd, fn ($q) => $q->where('created_at', '<=', $cutoffEnd))
             ->with(['attachments', 'sender' => fn ($q) => $q->withTrashed(), 'customer' => fn ($q) => $q->withTrashed()])
@@ -509,7 +619,7 @@ class TicketService
             ->get();
 
         $messages = $ticketMessages
-            ->merge($aiConversationMessages)
+            ->merge($customerHistoryMessages)
             ->sort(function (Message $a, Message $b): int {
                 $at = optional($a->created_at)->getTimestamp() ?? 0;
                 $bt = optional($b->created_at)->getTimestamp() ?? 0;
@@ -688,6 +798,11 @@ class TicketService
             $ticket = Ticket::create([
                 'customer_id' => $customer->id,
                 'division_id' => $division->id,
+                'global_subcategory_id' => $this->subcategoryId($payload['global_subcategory_id'] ?? null, null, true),
+                'division_subcategory_id' => $this->subcategoryId($payload['division_subcategory_id'] ?? null, (string) $division->id, true),
+                'site' => $this->nullableTicketText($payload['site'] ?? null, 'site'),
+                'zone' => $this->nullableTicketText($payload['zone'] ?? null, 'zone'),
+                'lot_number' => $this->nullableTicketText($payload['lot_number'] ?? null, 'lot_number'),
                 'assigned_to' => $division->is_fallback ? (User::query()->where('role', 'spv')->first()?->id) : null,
                 'created_by' => 'spv',
                 'priority' => (string) $payload['priority'],
@@ -817,6 +932,8 @@ class TicketService
             'customer' => fn ($q) => $q->withTrashed(),
             'division',
             'assignee' => fn ($q) => $q->withTrashed(),
+            'globalSubcategory',
+            'divisionSubcategory',
             'takeoverRequest' => fn ($q) => $q->with(['requester' => fn ($qq) => $qq->withTrashed()]),
         ]);
 
@@ -840,9 +957,14 @@ class TicketService
             'status' => $ticket->status,
             'priority' => $ticket->priority,
             'notes' => $ticket->notes,
+            'site' => $ticket->site,
+            'zone' => $ticket->zone,
+            'lot_number' => $ticket->lot_number,
             'takeover_request' => $takeover,
             'customer' => $this->formatCustomer($ticket->customer),
             'division' => $ticket->division ? ['id' => $ticket->division->id, 'name' => $ticket->division->name] : null,
+            'global_subcategory' => $ticket->globalSubcategory ? ['id' => $ticket->globalSubcategory->id, 'name' => $ticket->globalSubcategory->name] : null,
+            'division_subcategory' => $ticket->divisionSubcategory ? ['id' => $ticket->divisionSubcategory->id, 'name' => $ticket->divisionSubcategory->name] : null,
             'assigned_to' => $ticket->assignee ? ['id' => $ticket->assignee->id, 'name' => $ticket->assignee->name, 'role' => $ticket->assignee->role] : null,
             'created_by' => $ticket->created_by,
             'ai_confidence' => $ticket->ai_confidence,
@@ -865,6 +987,8 @@ class TicketService
             'customer' => fn ($q) => $q->withTrashed(),
             'division',
             'assignee' => fn ($q) => $q->withTrashed(),
+            'globalSubcategory',
+            'divisionSubcategory',
             'takeoverRequest',
         ]);
 
@@ -877,10 +1001,15 @@ class TicketService
             'subject' => $ticket->subject,
             'status' => $ticket->status,
             'priority' => $ticket->priority,
+            'site' => $ticket->site,
+            'zone' => $ticket->zone,
+            'lot_number' => $ticket->lot_number,
             'has_takeover_request' => $hasTakeover,
             'takeover_request_status' => $hasTakeover ? (string) $ticket->takeoverRequest->status : null,
             'customer' => $this->formatCustomer($ticket->customer),
             'division' => $ticket->division ? ['id' => $ticket->division->id, 'name' => $ticket->division->name] : null,
+            'global_subcategory' => $ticket->globalSubcategory ? ['id' => $ticket->globalSubcategory->id, 'name' => $ticket->globalSubcategory->name] : null,
+            'division_subcategory' => $ticket->divisionSubcategory ? ['id' => $ticket->divisionSubcategory->id, 'name' => $ticket->divisionSubcategory->name] : null,
             'assigned_to' => $ticket->assignee ? ['id' => $ticket->assignee->id, 'name' => $ticket->assignee->name] : null,
             'sla_fr_status' => $ticket->sla_fr_status,
             'sla_resolution_status' => $ticket->sla_resolution_status,
@@ -1362,6 +1491,8 @@ class TicketService
             'customer' => fn ($q) => $q->withTrashed(),
             'division',
             'assignee' => fn ($q) => $q->withTrashed(),
+            'globalSubcategory',
+            'divisionSubcategory',
             'takeoverRequest' => fn ($q) => $q->with(['requester' => fn ($qq) => $qq->withTrashed()]),
         ]);
 
@@ -1499,6 +1630,41 @@ class TicketService
         if ($len < 10 || $len > 15) {
             throw new HttpException(422, 'Nomor HP tidak valid.');
         }
+    }
+
+    private function subcategoryId(mixed $id, ?string $divisionId, bool $strict): ?string
+    {
+        if ($id === null || $id === '') {
+            return null;
+        }
+
+        $subcategory = is_string($id)
+            ? TicketSubcategory::query()->where('is_active', true)->find($id)
+            : null;
+        $isValid = $subcategory
+            && (string) ($subcategory->division_id ?? '') === (string) ($divisionId ?? '');
+
+        if (! $isValid && $strict) {
+            throw new HttpException(422, $divisionId
+                ? 'Subkategori tidak valid untuk divisi ticket.'
+                : 'Subkategori global tidak valid.');
+        }
+
+        return $isValid ? (string) $subcategory->id : null;
+    }
+
+    private function nullableTicketText(mixed $value, string $field): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        if (! is_string($value) || mb_strlen($value) > 255) {
+            throw new HttpException(422, "Payload tidak valid: {$field} harus berupa teks maksimal 255 karakter.");
+        }
+
+        $value = trim($value);
+
+        return $value === '' ? null : $value;
     }
 
     private function assertValidMediaKey(string $key): void

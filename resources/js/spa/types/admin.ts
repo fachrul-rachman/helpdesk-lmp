@@ -42,6 +42,14 @@ export type AdminDivisionsIndexResponse = {
     data: AdminDivision[];
 };
 
+export type AdminTicketSubcategory = {
+    id: string;
+    name: string;
+    division_id: string | null;
+    division: { id: string; name: string } | null;
+    is_active: boolean;
+};
+
 export type AdminSettingsResponse = {
     sla_fr_duration_minutes: number;
     sla_fr_reminder_minutes: number;

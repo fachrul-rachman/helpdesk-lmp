@@ -2,8 +2,8 @@
 
 use App\Models\Customer;
 use App\Models\Division;
-use App\Models\Message;
 use App\Models\Ticket;
+use App\Models\TicketSubcategory;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -58,95 +58,56 @@ function steTicket(Customer $customer, Division $division, array $attributes): T
     return $ticket->fresh();
 }
 
-function steMessage(array $attributes): Message
-{
-    $createdAt = $attributes['created_at'] ?? null;
-    unset($attributes['created_at']);
-
-    $message = Message::create($attributes);
-    if ($createdAt) {
-        $message->forceFill(['created_at' => $createdAt])->saveQuietly();
-    }
-
-    return $message->fresh();
-}
-
-test('SPV dapat mengekspor ticket solved dan closed sesuai template dan first response PIC', function () {
+test('SPV dapat mengekspor ticket solved dan closed sesuai kolom laporan baru', function () {
     config(['app.business_timezone' => 'Asia/Jakarta']);
     CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-06-22 10:00:00', 'Asia/Jakarta'));
 
     $spv = User::factory()->create(['role' => 'spv']);
-    $marketing = steDivision('Marketing');
     $operasional = steDivision('Operasional');
-    $picPertama = User::factory()->create([
-        'name' => 'Budiman',
-        'role' => 'pic',
-        'division_id' => $marketing->id,
+    $complaint = TicketSubcategory::create([
+        'division_id' => null,
+        'name' => 'Complaint',
+        'is_active' => true,
     ]);
-    $picTerakhir = User::factory()->create([
-        'name' => 'Sari',
-        'role' => 'pic',
+    $tombPecah = TicketSubcategory::create([
         'division_id' => $operasional->id,
+        'name' => 'Tomb Pecah',
+        'is_active' => true,
     ]);
     $customer = Customer::create(['phone_number' => '6281111111111', 'name' => 'Andi']);
 
-    $solved = steTicket($customer, $operasional, [
-        'assigned_to' => $picTerakhir->id,
+    steTicket($customer, $operasional, [
+        'global_subcategory_id' => $complaint->id,
+        'division_subcategory_id' => $tombPecah->id,
+        'site' => 'Cluster A',
+        'zone' => 'Zona 2',
+        'lot_number' => 'A-17',
         'subject' => 'Permintaan perubahan data',
+        'notes' => 'Data customer sudah diperbarui.',
         'status' => 'solved',
+        'sla_fr_completed_at' => CarbonImmutable::parse('2026-06-02 08:20:00', 'Asia/Jakarta'),
         'created_at' => CarbonImmutable::parse('2026-06-02 08:15:00', 'Asia/Jakarta'),
         'updated_at' => CarbonImmutable::parse('2026-06-03 10:00:00', 'Asia/Jakarta'),
         'solved_at' => CarbonImmutable::parse('2026-06-03 10:00:00', 'Asia/Jakarta'),
     ]);
-    steMessage([
-        'ticket_id' => $solved->id,
-        'customer_id' => $customer->id,
-        'sender_type' => 'spv',
-        'sender_id' => $spv->id,
-        'content' => 'Pesan SPV tidak dihitung',
-        'created_at' => CarbonImmutable::parse('2026-06-02 08:20:00', 'Asia/Jakarta'),
-    ]);
-    steMessage([
-        'ticket_id' => $solved->id,
-        'customer_id' => $customer->id,
-        'sender_type' => 'pic',
-        'sender_id' => $picPertama->id,
-        'content' => 'Respons PIC pertama',
-        'created_at' => CarbonImmutable::parse('2026-06-02 08:25:00', 'Asia/Jakarta'),
-    ]);
-    steMessage([
-        'ticket_id' => $solved->id,
-        'customer_id' => $customer->id,
-        'sender_type' => 'pic',
-        'sender_id' => $picTerakhir->id,
-        'content' => 'Respons PIC setelah ticket dipindah',
-        'created_at' => CarbonImmutable::parse('2026-06-02 09:00:00', 'Asia/Jakarta'),
-    ]);
 
-    $closed = steTicket($customer, $marketing, [
-        'assigned_to' => $picPertama->id,
+    steTicket($customer, $operasional, [
         'subject' => '=2+2',
+        'notes' => '=SUM(1,2)',
         'status' => 'closed',
+        'sla_fr_completed_at' => CarbonImmutable::parse('2026-06-10 09:08:00', 'Asia/Jakarta'),
         'created_at' => CarbonImmutable::parse('2026-06-10 09:00:00', 'Asia/Jakarta'),
         'updated_at' => CarbonImmutable::parse('2026-06-11 16:30:00', 'Asia/Jakarta'),
         'closed_at' => CarbonImmutable::parse('2026-06-11 16:30:00', 'Asia/Jakarta'),
     ]);
-    steMessage([
-        'ticket_id' => $closed->id,
-        'customer_id' => $customer->id,
-        'sender_type' => 'pic',
-        'sender_id' => $picPertama->id,
-        'content' => 'Respons kedua',
-        'created_at' => CarbonImmutable::parse('2026-06-10 09:08:00', 'Asia/Jakarta'),
-    ]);
 
-    steTicket($customer, $marketing, [
+    steTicket($customer, $operasional, [
         'subject' => 'Belum selesai',
         'status' => 'open',
         'sla_resolution_status' => 'running',
         'created_at' => CarbonImmutable::parse('2026-06-05 09:00:00', 'Asia/Jakarta'),
     ]);
-    steTicket($customer, $marketing, [
+    steTicket($customer, $operasional, [
         'subject' => 'Di luar periode',
         'status' => 'solved',
         'created_at' => CarbonImmutable::parse('2026-05-30 09:00:00', 'Asia/Jakarta'),
@@ -163,25 +124,52 @@ test('SPV dapat mengekspor ticket solved dan closed sesuai template dan first re
     $sheet = $spreadsheet->getActiveSheet();
 
     expect($sheet->getCell('A1')->getValue())->toContain('Periode: 1 – 30 Juni 2026');
-    expect($sheet->getMergeCells())->toHaveKeys(['A1:K1', 'A2:A3', 'B2:B3', 'F2:G2', 'H2:I2', 'J2:K2']);
-    expect($sheet->rangeToArray('A4:K4', null, true, true, false)[0])->toBe([
-        '1',
-        $solved->ticket_number,
-        'Permintaan perubahan data',
-        'Budiman',
-        'Marketing',
-        '02-06-2026',
-        '08:15',
-        '02-06-2026',
-        '08:25',
-        '03-06-2026',
-        '10:00',
+    expect($sheet->getMergeCells())->toHaveKey('A1:P1');
+    expect($sheet->rangeToArray('A2:P2', null, true, true, false)[0])->toBe([
+        'No',
+        'Nama Customer',
+        'No Telp Customer',
+        'Tanggal diterima',
+        'Jam diterima',
+        'Site',
+        'Zone',
+        'Nomor Lot',
+        'Deskripsi',
+        'Tanggal respon pertama',
+        'Waktu respon pertama',
+        'Kategori',
+        'Sub-kategori',
+        'Department',
+        'Konklusi',
+        'Status',
     ]);
-    expect($sheet->getCell('A5')->getValue())->toBe(2);
-    expect($sheet->getCell('B5')->getValue())->toBe($closed->ticket_number);
-    expect($sheet->getCell('C5')->getValue())->toBe('=2+2');
-    expect($sheet->getCell('C5')->getDataType())->toBe(DataType::TYPE_STRING);
-    expect($sheet->getCell('A6')->getValue())->toBeNull();
+    expect($sheet->getCell('A3')->getValue())->toBe(1);
+    expect($sheet->getCell('B3')->getValue())->toBe('Andi');
+    expect($sheet->getCell('C3')->getValue())->toBe('6281111111111');
+    expect($sheet->getCell('C3')->getDataType())->toBe(DataType::TYPE_STRING);
+    expect($sheet->getCell('D3')->getFormattedValue())->toBe('02-06-2026');
+    expect($sheet->getCell('E3')->getFormattedValue())->toBe('08:15');
+    expect($sheet->rangeToArray('F3:P3', null, true, true, false)[0])->toBe([
+        'Cluster A',
+        'Zona 2',
+        'A-17',
+        'Permintaan perubahan data',
+        '02-06-2026',
+        '08:20',
+        'Complaint',
+        'Tomb Pecah',
+        'Operasional',
+        'Data customer sudah diperbarui.',
+        'Solved',
+    ]);
+    expect($sheet->getCell('A4')->getValue())->toBe(2);
+    expect($sheet->getCell('I4')->getValue())->toBe('=2+2');
+    expect($sheet->getCell('I4')->getDataType())->toBe(DataType::TYPE_STRING);
+    expect($sheet->getCell('O4')->getValue())->toBe('=SUM(1,2)');
+    expect($sheet->getCell('O4')->getDataType())->toBe(DataType::TYPE_STRING);
+    expect($sheet->getCell('A5')->getValue())->toBeNull();
+    expect($sheet->getAutoFilter()->getRange())->toBe('A2:P4');
+    expect($sheet->getFreezePane())->toBe('A3');
 
     $spreadsheet->disconnectWorksheets();
 });
@@ -203,7 +191,7 @@ test('rentang tanggal bebas bersifat inklusif dan divalidasi', function () {
     $response->assertOk();
 
     $spreadsheet = IOFactory::load($response->baseResponse->getFile()->getPathname());
-    expect($spreadsheet->getActiveSheet()->getCell('B4')->getValue())->toBe($ticket->ticket_number);
+    expect($spreadsheet->getActiveSheet()->getCell('I3')->getValue())->toBe($ticket->subject);
     $spreadsheet->disconnectWorksheets();
 
     $this->getJson('/api/spv/tickets/export?period=custom&start_date=2026-06-22&end_date=2026-06-21', steAuth($spv))

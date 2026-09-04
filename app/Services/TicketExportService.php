@@ -7,7 +7,9 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Worksheet\PageSetup;
 use RuntimeException;
 
 class TicketExportService
@@ -22,27 +24,35 @@ class TicketExportService
         $timezone = config('app.business_timezone', 'Asia/Jakarta');
 
         $tickets = Ticket::query()
+            ->select([
+                'id',
+                'customer_id',
+                'division_id',
+                'global_subcategory_id',
+                'division_subcategory_id',
+                'site',
+                'zone',
+                'lot_number',
+                'subject',
+                'notes',
+                'status',
+                'sla_fr_completed_at',
+                'created_at',
+            ])
             ->whereIn('status', ['solved', 'closed'])
             ->whereBetween('created_at', [
                 $from->utc(),
                 $until->utc(),
             ])
             ->with([
-                'messages' => function ($query): void {
-                    $query->where('sender_type', 'pic')
-                        ->whereNotNull('sender_id')
-                        ->oldest('created_at')
-                        ->oldest('id');
-                },
-                'messages.sender' => function ($query): void {
-                    $query->withTrashed()->with([
-                        'division' => fn ($divisionQuery) => $divisionQuery->withTrashed(),
-                    ]);
-                },
+                'customer' => fn ($query) => $query->withTrashed()->select(['id', 'name', 'phone_number']),
+                'division' => fn ($query) => $query->withTrashed()->select(['id', 'name']),
+                'globalSubcategory:id,name',
+                'divisionSubcategory:id,name',
             ])
             ->oldest('created_at')
             ->oldest('id')
-            ->get();
+            ->lazy(500);
 
         $template = resource_path('templates/ticket-export/rekap-data-respons-tiket.xlsx');
         if (! is_file($template)) {
@@ -53,49 +63,64 @@ class TicketExportService
         $sheet = $spreadsheet->getActiveSheet();
         $sheet->setCellValue('A1', "REKAP DATA RESPONS TIKET\nPeriode: {$this->periodLabel($from, $until)}");
         $sheet->getStyle('A1')->getAlignment()->setWrapText(true);
+        $sheet->freezePane('A3');
+        $sheet->getPageSetup()
+            ->setOrientation(PageSetup::ORIENTATION_LANDSCAPE)
+            ->setFitToWidth(1)
+            ->setFitToHeight(0);
 
-        foreach ($tickets as $index => $ticket) {
-            $row = 4 + $index;
-            if ($row > 4) {
-                foreach (range('A', 'K') as $column) {
-                    $sheet->duplicateStyle($sheet->getStyle("{$column}4"), "{$column}{$row}");
+        $ticketCount = 0;
+        foreach ($tickets as $ticket) {
+            $row = 3 + $ticketCount;
+            if ($row > 3) {
+                foreach (range('A', 'P') as $column) {
+                    $sheet->duplicateStyle($sheet->getStyle("{$column}3"), "{$column}{$row}");
                 }
-                $sheet->getRowDimension($row)->setRowHeight($sheet->getRowDimension(4)->getRowHeight());
             }
 
-            $firstResponse = $ticket->messages->first();
             $createdAt = CarbonImmutable::instance($ticket->created_at)->setTimezone($timezone);
-            $respondedAt = $firstResponse
-                ? CarbonImmutable::instance($firstResponse->created_at)->setTimezone($timezone)
-                : null;
-            $resolvedValue = $ticket->status === 'closed' ? $ticket->closed_at : $ticket->solved_at;
-            $resolvedAt = $resolvedValue
-                ? CarbonImmutable::instance($resolvedValue)->setTimezone($timezone)
+            $respondedAt = $ticket->sla_fr_completed_at
+                ? CarbonImmutable::instance($ticket->sla_fr_completed_at)->setTimezone($timezone)
                 : null;
 
             $values = [
-                $index + 1,
-                $ticket->ticket_number,
-                $ticket->subject,
-                $firstResponse?->sender?->name,
-                $firstResponse?->sender?->division?->name,
-                $createdAt->format('d-m-Y'),
-                $createdAt->format('H:i'),
-                $respondedAt?->format('d-m-Y'),
-                $respondedAt?->format('H:i'),
-                $resolvedAt?->format('d-m-Y'),
-                $resolvedAt?->format('H:i'),
+                'B' => $ticket->customer?->name,
+                'C' => $ticket->customer?->phone_number,
+                'F' => $ticket->site,
+                'G' => $ticket->zone,
+                'H' => $ticket->lot_number,
+                'I' => $ticket->subject,
+                'L' => $ticket->globalSubcategory?->name,
+                'M' => $ticket->divisionSubcategory?->name,
+                'N' => $ticket->division?->name,
+                'O' => $ticket->notes,
+                'P' => ucfirst((string) $ticket->status),
             ];
 
-            $sheet->setCellValueExplicit("A{$row}", $index + 1, DataType::TYPE_NUMERIC);
-            foreach (array_combine(range('B', 'K'), array_slice($values, 1)) as $column => $value) {
+            $sheet->setCellValueExplicit("A{$row}", $ticketCount + 1, DataType::TYPE_NUMERIC);
+            foreach ($values as $column => $value) {
                 if ($value !== null) {
                     $sheet->setCellValueExplicit("{$column}{$row}", (string) $value, DataType::TYPE_STRING);
                 }
             }
-            $sheet->getStyle("A{$row}:K{$row}")->getAlignment()
+
+            $sheet->setCellValue("D{$row}", ExcelDate::PHPToExcel($createdAt));
+            $sheet->setCellValue("E{$row}", ExcelDate::PHPToExcel($createdAt));
+            if ($respondedAt) {
+                $sheet->setCellValue("J{$row}", ExcelDate::PHPToExcel($respondedAt));
+                $sheet->setCellValue("K{$row}", ExcelDate::PHPToExcel($respondedAt));
+            }
+
+            $sheet->getStyle("A{$row}:P{$row}")->getAlignment()
                 ->setVertical(Alignment::VERTICAL_CENTER);
+            $sheet->getStyle("I{$row}")->getAlignment()->setWrapText(true);
+            $sheet->getStyle("O{$row}")->getAlignment()->setWrapText(true);
+            $sheet->getRowDimension($row)->setRowHeight(-1);
+            $ticketCount++;
         }
+
+        $lastRow = max(3, 2 + $ticketCount);
+        $sheet->setAutoFilter("A2:P{$lastRow}");
 
         $directory = storage_path('app/tmp/ticket-exports');
         if (! is_dir($directory) && ! mkdir($directory, 0755, true) && ! is_dir($directory)) {

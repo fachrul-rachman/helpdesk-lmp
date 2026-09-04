@@ -25,6 +25,11 @@ class Ticket extends Model
         'ticket_number',
         'customer_id',
         'division_id',
+        'global_subcategory_id',
+        'division_subcategory_id',
+        'site',
+        'zone',
+        'lot_number',
         'assigned_to',
         'created_by',
         'priority',
@@ -100,6 +105,16 @@ class Ticket extends Model
     public function division(): BelongsTo
     {
         return $this->belongsTo(Division::class);
+    }
+
+    public function globalSubcategory(): BelongsTo
+    {
+        return $this->belongsTo(TicketSubcategory::class, 'global_subcategory_id');
+    }
+
+    public function divisionSubcategory(): BelongsTo
+    {
+        return $this->belongsTo(TicketSubcategory::class, 'division_subcategory_id');
     }
 
     public function assignee(): BelongsTo

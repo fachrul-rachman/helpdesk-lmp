@@ -38,7 +38,7 @@ export function useAuthBootstrap() {
 
                 setAccessToken(response.data.access_token);
             } catch {
-                clear();
+                await clear();
             } finally {
                 if (isMounted) setIsBootstrapping(false);
             }

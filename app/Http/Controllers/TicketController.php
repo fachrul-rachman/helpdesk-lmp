@@ -83,6 +83,63 @@ class TicketController extends Controller
         ]);
     }
 
+    public function updateSubcategories(Request $request, string $id)
+    {
+        $user = $request->user();
+        if (!$user) {
+            throw new HttpException(401, 'Token tidak valid.');
+        }
+
+        $validated = $request->validate([
+            'global_subcategory_id' => ['sometimes', 'nullable', 'uuid', 'exists:ticket_subcategories,id'],
+            'division_subcategory_id' => ['sometimes', 'nullable', 'uuid', 'exists:ticket_subcategories,id'],
+        ]);
+
+        $ticket = $this->ticketService->updateSubcategories($user, $id, $validated);
+
+        return response()->json([
+            'data' => $this->ticketService->formatTicketDetail($ticket),
+        ]);
+    }
+
+    public function updateLocation(Request $request, string $id)
+    {
+        $user = $request->user();
+        if (!$user) {
+            throw new HttpException(401, 'Token tidak valid.');
+        }
+
+        $validated = $request->validate([
+            'site' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'zone' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'lot_number' => ['sometimes', 'nullable', 'string', 'max:255'],
+        ]);
+
+        $ticket = $this->ticketService->updateLocation($user, $id, $validated);
+
+        return response()->json([
+            'data' => $this->ticketService->formatTicketDetail($ticket),
+        ]);
+    }
+
+    public function updateSubject(Request $request, string $id)
+    {
+        $user = $request->user();
+        if (!$user) {
+            throw new HttpException(401, 'Token tidak valid.');
+        }
+
+        $validated = $request->validate([
+            'subject' => ['required', 'string', 'max:500'],
+        ]);
+
+        $ticket = $this->ticketService->updateSubject($user, $id, (string) $validated['subject']);
+
+        return response()->json([
+            'data' => $this->ticketService->formatTicketDetail($ticket),
+        ]);
+    }
+
     public function updateCustomerNotes(Request $request, string $id)
     {
         $user = $request->user();

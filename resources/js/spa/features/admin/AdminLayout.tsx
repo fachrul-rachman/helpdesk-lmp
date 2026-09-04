@@ -44,8 +44,8 @@ export function AdminLayout() {
     const user = useAuthStore((s) => s.user);
     const clear = useAuthStore((s) => s.clear);
 
-    function handleLogout() {
-        clear();
+    async function handleLogout() {
+        await clear();
         navigate('/login', { replace: true });
     }
 
@@ -59,6 +59,7 @@ export function AdminLayout() {
                     <div className="mt-6 space-y-1">
                         <SidebarItem to="/admin/users" label="User" icon={<UsersIcon className="h-5 w-5" />} />
                         <SidebarItem to="/admin/divisions" label="Divisi" icon={<BuildingIcon className="h-5 w-5" />} />
+                        <SidebarItem to="/admin/ticket-subcategories" label="Subkategori" icon={<ClipboardIcon className="h-5 w-5" />} />
                         <SidebarItem to="/admin/settings" label="Konfigurasi" icon={<SettingsIcon className="h-5 w-5" />} />
                         <SidebarItem to="/admin/meta-templates" label="Template WA" icon={<TemplateIcon className="h-5 w-5" />} />
                         <SidebarItem to="/admin/audit-logs" label="Audit Log" icon={<ClipboardIcon className="h-5 w-5" />} />
@@ -88,9 +89,10 @@ export function AdminLayout() {
                     </main>
 
                     <nav className="fixed bottom-0 left-0 right-0 z-20 border-t border-slate-200 bg-white lg:hidden">
-                        <div className="grid grid-cols-5 gap-1 px-2 py-2">
+                        <div className="grid grid-cols-6 gap-1 px-2 py-2">
                             <MobileNavItem to="/admin/users" label="User" icon={<UsersIcon className="h-5 w-5" />} />
                             <MobileNavItem to="/admin/divisions" label="Divisi" icon={<BuildingIcon className="h-5 w-5" />} />
+                            <MobileNavItem to="/admin/ticket-subcategories" label="Kategori" icon={<ClipboardIcon className="h-5 w-5" />} />
                             <MobileNavItem to="/admin/settings" label="Konfig" icon={<SettingsIcon className="h-5 w-5" />} />
                             <MobileNavItem to="/admin/meta-templates" label="Template" icon={<TemplateIcon className="h-5 w-5" />} />
                             <MobileNavItem to="/admin/audit-logs" label="Audit" icon={<ClipboardIcon className="h-5 w-5" />} />

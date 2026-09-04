@@ -105,3 +105,44 @@ test('PIC tidak bisa reply ticket bukan miliknya', function () {
     ], tmAuth($picB))->assertStatus(404);
 });
 
+test('ticket manual menampilkan riwayat chat customer dari ticket sebelumnya', function () {
+    $division = tmDivision();
+    $spv = tmUser('spv');
+    $customer = Customer::create(['phone_number' => '6287000000001', 'name' => 'Andi']);
+
+    $oldTicket = Ticket::create([
+        'customer_id' => $customer->id,
+        'division_id' => $division->id,
+        'assigned_to' => null,
+        'created_by' => 'ai',
+        'priority' => 'medium',
+        'status' => 'open',
+        'subject' => 'Ticket lama',
+        'sla_fr_status' => 'done',
+        'sla_resolution_status' => 'running',
+    ]);
+    $oldMessage = Message::create([
+        'ticket_id' => $oldTicket->id,
+        'customer_id' => $customer->id,
+        'sender_type' => 'customer',
+        'content' => 'Percakapan sebelum ticket manual',
+    ]);
+    $oldMessage->forceFill(['created_at' => now()->subMonths(6)])->save();
+
+    $manualTicket = Ticket::create([
+        'customer_id' => $customer->id,
+        'division_id' => $division->id,
+        'assigned_to' => null,
+        'created_by' => 'spv',
+        'priority' => 'medium',
+        'status' => 'queue',
+        'subject' => 'Ticket manual',
+        'sla_fr_status' => 'running',
+        'sla_resolution_status' => 'waiting',
+    ]);
+
+    $this->getJson("/api/tickets/{$manualTicket->id}/messages", tmAuth($spv))
+        ->assertOk()
+        ->assertJsonCount(1, 'data')
+        ->assertJsonPath('data.0.content', 'Percakapan sebelum ticket manual');
+});

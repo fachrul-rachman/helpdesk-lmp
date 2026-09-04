@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { TicketLocationFields } from '../../components/common/TicketLocationFields';
+import { TicketSubcategoryFields } from '../../components/common/TicketSubcategoryFields';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
@@ -19,6 +21,11 @@ export function SpvCreateTicketPage() {
     const [subject, setSubject] = useState('');
     const [priority, setPriority] = useState<'low' | 'medium' | 'high'>('medium');
     const [notes, setNotes] = useState('');
+    const [globalSubcategoryId, setGlobalSubcategoryId] = useState('');
+    const [divisionSubcategoryId, setDivisionSubcategoryId] = useState('');
+    const [site, setSite] = useState('');
+    const [zone, setZone] = useState('');
+    const [lotNumber, setLotNumber] = useState('');
 
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -66,6 +73,11 @@ export function SpvCreateTicketPage() {
                 subject,
                 priority,
                 notes: notes.trim() ? notes.trim() : null,
+                global_subcategory_id: globalSubcategoryId || null,
+                division_subcategory_id: divisionSubcategoryId || null,
+                site: site.trim() || null,
+                zone: zone.trim() || null,
+                lot_number: lotNumber.trim() || null,
             });
 
             navigate(`/spv/tickets/${res.data.data.id}`, { replace: true });
@@ -112,7 +124,10 @@ export function SpvCreateTicketPage() {
                             id="division"
                             className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                             value={divisionId}
-                            onChange={(e) => setDivisionId(e.target.value)}
+                            onChange={(e) => {
+                                setDivisionId(e.target.value);
+                                setDivisionSubcategoryId('');
+                            }}
                             disabled={isSubmitting}
                         >
                             <option value="" disabled>
@@ -126,6 +141,29 @@ export function SpvCreateTicketPage() {
                                 </option>
                             ))}
                         </select>
+                    </div>
+
+                    <div className="sm:col-span-2">
+                        <TicketSubcategoryFields
+                            divisionId={divisionId}
+                            globalValue={globalSubcategoryId}
+                            divisionValue={divisionSubcategoryId}
+                            onGlobalChange={setGlobalSubcategoryId}
+                            onDivisionChange={setDivisionSubcategoryId}
+                            disabled={isSubmitting}
+                        />
+                    </div>
+
+                    <div className="sm:col-span-2">
+                        <TicketLocationFields
+                            site={site}
+                            zone={zone}
+                            lotNumber={lotNumber}
+                            onSiteChange={setSite}
+                            onZoneChange={setZone}
+                            onLotNumberChange={setLotNumber}
+                            disabled={isSubmitting}
+                        />
                     </div>
 
                     <div className="space-y-2 sm:col-span-2">
@@ -176,4 +214,3 @@ export function SpvCreateTicketPage() {
         </div>
     );
 }
-

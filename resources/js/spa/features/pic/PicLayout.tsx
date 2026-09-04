@@ -1,6 +1,7 @@
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { Button } from '../../components/ui/button';
+import { PushNotifications } from '../../components/common/PushNotifications';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../stores/authStore';
 
@@ -74,8 +75,8 @@ export function PicLayout() {
     const user = useAuthStore((s) => s.user);
     const clear = useAuthStore((s) => s.clear);
 
-    function handleLogout() {
-        clear();
+    async function handleLogout() {
+        await clear();
         navigate('/login', { replace: true });
     }
 
@@ -137,6 +138,8 @@ export function PicLayout() {
                             </div>
                         </div>
                     </header>
+
+                    <PushNotifications />
 
                     <main className="min-w-0 flex-1 px-4 py-4 pb-20 lg:pb-6">
                         <Outlet />

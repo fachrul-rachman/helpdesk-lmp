@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\CustomerController;
 use App\Http\Controllers\Admin\DivisionController;
 use App\Http\Controllers\Admin\MetaWhatsappTemplateController;
 use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\Admin\TicketSubcategoryController as AdminTicketSubcategoryController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\UserPasswordController;
 use App\Http\Controllers\AttachmentController;
@@ -18,6 +19,7 @@ use App\Http\Controllers\Spv\TakeoverRequestController as SpvTakeoverRequestCont
 use App\Http\Controllers\Spv\TicketController as SpvTicketController;
 use App\Http\Controllers\Spv\TicketExportController;
 use App\Http\Controllers\TicketController;
+use App\Http\Controllers\TicketSubcategoryController;
 use App\Http\Controllers\Webhook\N8nWebhookController;
 use App\Http\Controllers\Webhook\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
@@ -27,6 +29,12 @@ Route::prefix('auth')->group(function (): void {
     Route::post('refresh', [AuthController::class, 'refresh']);
     Route::post('logout', [AuthController::class, 'logout'])->middleware('auth.jwt');
     Route::post('change-password', [AuthController::class, 'changePassword'])->middleware('auth.jwt');
+});
+
+Route::prefix('push')->middleware(['auth.jwt', 'role:pic,spv', 'throttle:30,1'])->group(function (): void {
+    Route::get('config', [\App\Http\Controllers\PushSubscriptionController::class, 'config']);
+    Route::post('subscriptions', [\App\Http\Controllers\PushSubscriptionController::class, 'store']);
+    Route::delete('subscriptions', [\App\Http\Controllers\PushSubscriptionController::class, 'destroy']);
 });
 
 Route::post('auth/force-logout/{user_id}', [AuthController::class, 'forceLogout'])
@@ -62,15 +70,24 @@ Route::prefix('admin')->middleware(['auth.jwt', 'role:admin'])->group(function (
     Route::post('meta-templates/sync', [MetaWhatsappTemplateController::class, 'sync']);
 
     Route::delete('customers/{id}', [CustomerController::class, 'destroy']);
+
+    Route::get('ticket-subcategories', [AdminTicketSubcategoryController::class, 'index']);
+    Route::post('ticket-subcategories', [AdminTicketSubcategoryController::class, 'store']);
+    Route::put('ticket-subcategories/{id}', [AdminTicketSubcategoryController::class, 'update']);
+    Route::delete('ticket-subcategories/{id}', [AdminTicketSubcategoryController::class, 'destroy']);
 });
 
 Route::middleware(['auth.jwt'])->group(function (): void {
     Route::get('divisions', [DivisionController::class, 'index']);
+    Route::get('ticket-subcategories', [TicketSubcategoryController::class, 'index']);
     Route::get('tickets', [TicketController::class, 'index']);
     Route::get('tickets/{id}', [TicketController::class, 'show']);
 
     Route::patch('tickets/{id}/status', [TicketController::class, 'updateStatus']);
     Route::patch('tickets/{id}/notes', [TicketController::class, 'updateNotes']);
+    Route::patch('tickets/{id}/subcategories', [TicketController::class, 'updateSubcategories']);
+    Route::patch('tickets/{id}/location', [TicketController::class, 'updateLocation']);
+    Route::patch('tickets/{id}/subject', [TicketController::class, 'updateSubject']);
 
     Route::get('tickets/{id}/messages', [TicketController::class, 'messagesIndex']);
     Route::post('tickets/{id}/messages', [TicketController::class, 'messagesStore']);

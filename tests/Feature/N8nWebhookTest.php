@@ -4,6 +4,7 @@ use App\Models\Customer;
 use App\Models\Division;
 use App\Models\MessageAttachment;
 use App\Models\Ticket;
+use App\Models\TicketSubcategory;
 use App\Models\User;
 use App\Services\MediaService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -92,6 +93,17 @@ test('ticket created from n8n payload', function () {
         'is_active' => true,
     ]);
 
+    $globalSubcategory = TicketSubcategory::create([
+        'name' => 'Complaint',
+        'division_id' => null,
+        'is_active' => true,
+    ]);
+    $divisionSubcategory = TicketSubcategory::create([
+        'name' => 'Tomb Pecah',
+        'division_id' => $division->id,
+        'is_active' => true,
+    ]);
+
     $resp = $this->postJson('/api/webhook/n8n', [
         'event' => 'ticket.create',
         'customer_phone_number' => '08123456789',
@@ -101,6 +113,11 @@ test('ticket created from n8n payload', function () {
             'division_id' => $division->id,
             'ai_confidence' => 0.92,
             'is_fallback' => false,
+            'global_subcategory_id' => $globalSubcategory->id,
+            'division_subcategory_id' => $divisionSubcategory->id,
+            'site' => 'LMP Karawang',
+            'zone' => 'Zone B',
+            'lot_number' => 'B-12-08',
         ],
         'ai_reply' => [
             'message' => 'Kami buat tiket ya.',
@@ -111,7 +128,12 @@ test('ticket created from n8n payload', function () {
     ]);
 
     $resp->assertOk()->assertJson(['success' => true]);
-    expect(Ticket::count())->toBe(1);
+    $ticket = Ticket::query()->firstOrFail();
+    expect($ticket->global_subcategory_id)->toBe($globalSubcategory->id)
+        ->and($ticket->division_subcategory_id)->toBe($divisionSubcategory->id)
+        ->and($ticket->site)->toBe('LMP Karawang')
+        ->and($ticket->zone)->toBe('Zone B')
+        ->and($ticket->lot_number)->toBe('B-12-08');
 });
 
 test('fallback ticket created correctly', function () {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 
 import { api } from '../../lib/axios';
 import { Button } from '../../components/ui/button';
@@ -7,6 +7,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { EyeIcon, EyeOffIcon } from '../../components/common/icons';
 import { useAuthStore } from '../../stores/authStore';
+import { clearLocalPush } from '../../lib/pushRegistration';
 import type { LoginResponse, UserRole } from '../../types/auth';
 
 function defaultPathForRole(role: UserRole) {
@@ -17,6 +18,9 @@ function defaultPathForRole(role: UserRole) {
 
 export function LoginPage() {
     const navigate = useNavigate();
+    const location = useLocation();
+    const from = location.state?.from;
+    const destination = typeof from === 'string' && /^\/(pic|spv)\/tickets\/[a-zA-Z0-9-]+$/.test(from) ? from : null;
     const accessToken = useAuthStore((s) => s.accessToken);
     const user = useAuthStore((s) => s.user);
     const setTokens = useAuthStore((s) => s.setTokens);
@@ -30,9 +34,9 @@ export function LoginPage() {
 
     useEffect(() => {
         if (accessToken && user) {
-            navigate(defaultPathForRole(user.role), { replace: true });
+            navigate(destination ?? defaultPathForRole(user.role), { replace: true });
         }
-    }, [accessToken, user, navigate]);
+    }, [accessToken, user, navigate, destination]);
 
     async function handleSubmit(event: React.FormEvent) {
         event.preventDefault();
@@ -45,6 +49,7 @@ export function LoginPage() {
 
         setIsSubmitting(true);
         try {
+            await clearLocalPush();
             const response = await api.post<LoginResponse>('/api/auth/login', {
                 phone_number: phoneNumber,
                 password,
@@ -56,7 +61,7 @@ export function LoginPage() {
             });
             setUser(response.data.user);
 
-            navigate(defaultPathForRole(response.data.user.role), { replace: true });
+            navigate(destination ?? defaultPathForRole(response.data.user.role), { replace: true });
         } catch (error: any) {
             const message =
                 error?.response?.data?.message ??

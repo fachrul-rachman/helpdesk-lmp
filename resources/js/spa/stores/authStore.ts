@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 
 import type { AuthUser } from '../types/auth';
+import { clearLocalPush } from '../lib/pushRegistration';
 
 const refreshTokenKey = 'helpdesk_refresh_token';
 const userKey = 'helpdesk_user';
@@ -12,7 +13,7 @@ type AuthState = {
     setTokens: (params: { accessToken: string; refreshToken: string }) => void;
     setUser: (user: AuthUser | null) => void;
     setAccessToken: (token: string | null) => void;
-    clear: () => void;
+    clear: () => Promise<void>;
 };
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -43,10 +44,12 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({ user });
     },
     setAccessToken: (token) => set({ accessToken: token }),
-    clear: () => {
+    clear: async () => {
         localStorage.removeItem(refreshTokenKey);
         localStorage.removeItem(userKey);
         set({ accessToken: null, refreshToken: null, user: null });
+        // Clear the worker account before navigating away, including expired sessions.
+        await clearLocalPush().catch(() => undefined);
     },
 }));
 
