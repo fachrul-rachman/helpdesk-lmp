@@ -114,6 +114,63 @@ test('incoming message forwarded to n8n if no active ticket', function () {
     });
 });
 
+test('re-introduction uses the configured AMG identity', function () {
+    config([
+        'helpdesk.brand' => 'AMG',
+        'services.n8n.webhook_url' => 'https://n8n.example.com/webhook/abc',
+        'services.n8n.secret' => 'n8n-secret',
+    ]);
+
+    Http::fake([
+        'https://n8n.example.com/*' => Http::response(['ok' => true], 200),
+        'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
+    ]);
+
+    $payload = json_encode(metaEnvelope([
+        'id' => 'wamid.amg-intro',
+        'from' => '628123456789',
+        'timestamp' => (string) time(),
+        'type' => 'text',
+        'text' => ['body' => 'Halo'],
+    ]), JSON_UNESCAPED_SLASHES);
+
+    $this->call('POST', '/api/webhook/whatsapp', [], [], [], [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_HUB_SIGNATURE_256' => signPayload($payload, 'test-secret'),
+    ], $payload)->assertOk();
+
+    expect(Message::query()->where('sender_type', 'system')->value('content'))
+        ->toBe("Hi, saya Zahra. Senang dapat mendampingi Anda dalam memenuhi kebutuhan terkait Al Azhar Memorial Garden.\nSilakan sampaikan pertanyaan atau kebutuhan Anda, saya siap membantu.");
+});
+
+test('re-introduction defaults to the LMP identity', function () {
+    config([
+        'services.n8n.webhook_url' => 'https://n8n.example.com/webhook/abc',
+        'services.n8n.secret' => 'n8n-secret',
+    ]);
+
+    Http::fake([
+        'https://n8n.example.com/*' => Http::response(['ok' => true], 200),
+        'https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.out']]], 200),
+    ]);
+
+    $payload = json_encode(metaEnvelope([
+        'id' => 'wamid.lmp-intro',
+        'from' => '628123456789',
+        'timestamp' => (string) time(),
+        'type' => 'text',
+        'text' => ['body' => 'Halo'],
+    ]), JSON_UNESCAPED_SLASHES);
+
+    $this->call('POST', '/api/webhook/whatsapp', [], [], [], [
+        'CONTENT_TYPE' => 'application/json',
+        'HTTP_X_HUB_SIGNATURE_256' => signPayload($payload, 'test-secret'),
+    ], $payload)->assertOk();
+
+    expect(Message::query()->where('sender_type', 'system')->value('content'))
+        ->toBe("Hi, saya Lestari. Senang dapat mendampingi Anda dalam memenuhi kebutuhan terkait Lestari Memorial Park.\nSilakan sampaikan pertanyaan atau kebutuhan Anda, saya siap membantu.");
+});
+
 test('incoming message not forwarded if active ticket exists', function () {
     config([
         'services.n8n.webhook_url' => 'https://n8n.example.com/webhook/abc',
