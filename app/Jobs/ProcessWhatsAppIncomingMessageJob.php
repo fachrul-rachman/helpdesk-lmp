@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Events\AiConversationUpdated;
 use App\Events\MessageSent;
+use App\Events\TicketStatusChanged;
 use App\Models\Customer;
 use App\Models\Message;
 use App\Models\MessageAttachment;
@@ -12,16 +13,13 @@ use App\Services\MediaService;
 use App\Services\NotificationService;
 use App\Services\SlaService;
 use App\Support\PhoneNumber;
+use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
-use Carbon\CarbonImmutable;
-use App\Events\TicketStatusChanged;
-use App\Jobs\DebouncedForwardToN8nJob;
 
 class ProcessWhatsAppIncomingMessageJob implements ShouldQueue
 {
@@ -30,9 +28,7 @@ class ProcessWhatsAppIncomingMessageJob implements ShouldQueue
     /**
      * @param  array<string, mixed>  $payload
      */
-    public function __construct(private readonly array $payload)
-    {
-    }
+    public function __construct(private readonly array $payload) {}
 
     /**
      * Execute the job.
@@ -133,7 +129,7 @@ class ProcessWhatsAppIncomingMessageJob implements ShouldQueue
             $mediaService = app(MediaService::class);
 
             foreach ($attachments as $att) {
-                if (!is_array($att)) {
+                if (! is_array($att)) {
                     continue;
                 }
 
@@ -154,7 +150,7 @@ class ProcessWhatsAppIncomingMessageJob implements ShouldQueue
                     MessageAttachment::create([
                         'message_id' => $message->id,
                         'type' => $attType !== '' ? $attType : $messageType,
-                        'file_name' => $fileName !== '' ? $fileName : (Str::uuid()->toString() . '.' . ($downloaded['ext'] ?? 'bin')),
+                        'file_name' => $fileName !== '' ? $fileName : (Str::uuid()->toString().'.'.($downloaded['ext'] ?? 'bin')),
                         'r2_key' => $r2Key,
                         'mime_type' => $mimeType !== '' ? $mimeType : ($downloaded['mime_type'] ?? 'application/octet-stream'),
                         'size_bytes' => (int) ($downloaded['size_bytes'] ?? 0),
@@ -253,7 +249,7 @@ class ProcessWhatsAppIncomingMessageJob implements ShouldQueue
             'timestamp' => optional($message->created_at)->toISOString(),
         ];
 
-        if (!$pending) {
+        if (! $pending) {
             $pending = [
                 'event' => $event,
                 'customer' => [
@@ -280,18 +276,19 @@ class ProcessWhatsAppIncomingMessageJob implements ShouldQueue
 
             Cache::put($cacheKey, $pending, now()->addMinutes(15));
             DebouncedForwardToN8nJob::dispatch($cacheKey)->delay(now()->addSeconds($debounceSeconds));
+
             return;
         }
 
         $pendingMessages = $pending['messages'] ?? [];
-        if (!is_array($pendingMessages)) {
+        if (! is_array($pendingMessages)) {
             $pendingMessages = [];
         }
         $pendingMessages[] = $messagePayload;
         $pending['messages'] = $pendingMessages;
 
         $pendingAttachments = $pending['attachments'] ?? [];
-        if (!is_array($pendingAttachments)) {
+        if (! is_array($pendingAttachments)) {
             $pendingAttachments = [];
         }
         foreach ($attachments as $att) {
@@ -344,11 +341,22 @@ class ProcessWhatsAppIncomingMessageJob implements ShouldQueue
             return;
         }
 
-        $introText = "Hi, saya Lestari. Senang dapat mendampingi Anda dalam memenuhi kebutuhan terkait Lestari Memorial Park.\nSilakan sampaikan pertanyaan atau kebutuhan Anda, saya siap membantu.";
+        $brand = strtoupper((string) config('helpdesk.brand', 'LMP'));
+        $identity = config("helpdesk.brands.{$brand}");
+
+        if (! is_array($identity)) {
+            Log::warning('helpdesk.invalid_brand', ['brand' => $brand]);
+            $identity = config('helpdesk.brands.LMP', []);
+        }
+
+        $assistantName = (string) ($identity['assistant_name'] ?? 'Lestari');
+        $companyName = (string) ($identity['company_name'] ?? 'Lestari Memorial Park');
+        $introText = "Hi, saya {$assistantName}. Senang dapat mendampingi Anda dalam memenuhi kebutuhan terkait {$companyName}.\nSilakan sampaikan pertanyaan atau kebutuhan Anda, saya siap membantu.";
         try {
             app(NotificationService::class)->sendText($phone, $introText);
         } catch (\Throwable $e) {
             Log::warning('ai_introduction.send_failed', ['customer_id' => $customer->id, 'error' => $e->getMessage()]);
+
             return;
         }
 
