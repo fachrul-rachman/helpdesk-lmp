@@ -2,6 +2,7 @@
 
 use App\Models\Customer;
 use App\Models\Division;
+use App\Models\Message;
 use App\Models\MessageAttachment;
 use App\Models\Ticket;
 use App\Models\User;
@@ -15,7 +16,7 @@ uses(RefreshDatabase::class);
 
 function tauAuth(User $user): array
 {
-    return ['Authorization' => 'Bearer ' . JWTAuth::fromUser($user)];
+    return ['Authorization' => 'Bearer '.JWTAuth::fromUser($user)];
 }
 
 test('POST messages mendukung upload attachment dan menyimpan ke r2', function () {
@@ -66,6 +67,13 @@ test('POST messages mendukung upload attachment dan menyimpan ke r2', function (
         'subject' => 'Test',
         'sla_fr_status' => 'done',
         'sla_resolution_status' => 'running',
+    ]);
+    Message::create([
+        'ticket_id' => $ticket->id,
+        'customer_id' => $customer->id,
+        'sender_type' => 'customer',
+        'content' => 'Mohon dikirim lampirannya',
+        'wa_message_id' => 'wa-attachment-ticket',
     ]);
 
     $img = UploadedFile::fake()->image('foto.jpg')->size(500);

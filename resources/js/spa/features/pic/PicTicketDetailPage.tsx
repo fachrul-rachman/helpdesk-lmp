@@ -20,14 +20,20 @@ import { TicketSubcategoryFields } from '../../components/common/TicketSubcatego
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
+import { ResumeConversationForm } from '../tickets/ResumeConversationForm';
+import { useReplyWindow } from '../tickets/useReplyWindow';
 import { api } from '../../lib/axios';
 import { getEcho } from '../../lib/echo';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../stores/authStore';
-import type { TicketDetail, TicketMessage } from '../../types/ticket';
+import type {
+    ReplyWindow,
+    TicketDetail,
+    TicketMessage,
+} from '../../types/ticket';
 
 type TicketDetailResponse = { data: TicketDetail };
-type MessagesResponse = { data: TicketMessage[] };
+type MessagesResponse = { data: TicketMessage[]; reply_window: ReplyWindow };
 
 function bubbleAlign(senderType: TicketMessage['sender_type']) {
     return senderType === 'customer' ? 'items-start' : 'items-end';
@@ -67,6 +73,8 @@ export function PicTicketDetailPage() {
     const [isSending, setIsSending] = useState(false);
     const [sendError, setSendError] = useState<string | null>(null);
     const [files, setFiles] = useState<File[]>([]);
+    const { replyWindow, setReplyWindow, openFromCustomerMessage } =
+        useReplyWindow();
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -113,6 +121,7 @@ export function PicTicketDetailPage() {
                 if (!isMounted) return;
                 setTicket(ticketRes.data.data);
                 setMessages(msgsRes.data.data ?? []);
+                setReplyWindow(msgsRes.data.reply_window);
                 setTicketNotesDraft(ticketRes.data.data.notes ?? '');
                 setCustomerNotesDraft(
                     ticketRes.data.data.customer?.notes ?? '',
@@ -155,6 +164,9 @@ export function PicTicketDetailPage() {
         const onMessageSent = (payload: any) => {
             const message = payload?.data as TicketMessage | undefined;
             if (!message?.id) return;
+            if (message.sender_type === 'customer') {
+                openFromCustomerMessage(message.created_at);
+            }
             setMessages((prev) => {
                 if (prev.some((m) => m.id === message.id)) return prev;
                 return [...prev, message];
@@ -180,9 +192,9 @@ export function PicTicketDetailPage() {
             channel.stopListening('.TicketStatusChanged');
             echo.leave(`ticket.${id}`);
         };
-    }, [id]);
+    }, [id, openFromCustomerMessage]);
 
-    const canReply = useMemo(() => {
+    const canManageConversation = useMemo(() => {
         if (!ticket) return false;
         const isReadOnlyByTakeover =
             ticket.takeover_request?.status === 'approved' &&
@@ -197,6 +209,10 @@ export function PicTicketDetailPage() {
             !isReadOnlyByTakeover
         );
     }, [ticket, currentUser]);
+
+    const canReply = canManageConversation && replyWindow?.is_open === true;
+    const replyWindowExpired =
+        canManageConversation && replyWindow && !replyWindow.is_open;
 
     const takeoverState = useMemo(() => {
         const req = ticket?.takeover_request ?? null;
@@ -638,7 +654,17 @@ export function PicTicketDetailPage() {
                                 </div>
                             ) : null}
 
-                            {files.length ? (
+                            {replyWindowExpired ? (
+                                <ResumeConversationForm
+                                    ticketId={ticket.id}
+                                    customerName={
+                                        ticket.customer?.name ?? 'Customer'
+                                    }
+                                    summary={ticket.subject}
+                                />
+                            ) : null}
+
+                            {!replyWindowExpired && files.length ? (
                                 <div className="mb-3 space-y-2">
                                     {files.map((f, idx) => (
                                         <div
@@ -673,7 +699,12 @@ export function PicTicketDetailPage() {
                                 </div>
                             ) : null}
 
-                            <div className="flex gap-2">
+                            <div
+                                className={cn(
+                                    'flex gap-2',
+                                    replyWindowExpired && 'hidden',
+                                )}
+                            >
                                 <input
                                     ref={fileInputRef}
                                     type="file"

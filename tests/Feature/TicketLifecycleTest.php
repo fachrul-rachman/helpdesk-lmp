@@ -2,6 +2,7 @@
 
 use App\Models\Customer;
 use App\Models\Division;
+use App\Models\Message;
 use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -39,7 +40,7 @@ function makeUser(string $role, array $overrides = []): User
 
 function authHeaderFor(User $user): array
 {
-    return ['Authorization' => 'Bearer ' . JWTAuth::fromUser($user)];
+    return ['Authorization' => 'Bearer '.JWTAuth::fromUser($user)];
 }
 
 test('new -> open otomatis saat human pertama reply', function () {
@@ -58,6 +59,13 @@ test('new -> open otomatis saat human pertama reply', function () {
         'notes' => null,
         'sla_fr_status' => 'running',
         'sla_resolution_status' => 'waiting',
+    ]);
+    Message::create([
+        'ticket_id' => $ticket->id,
+        'customer_id' => $customer->id,
+        'sender_type' => 'customer',
+        'content' => 'Mohon dibantu',
+        'wa_message_id' => 'wa-new-ticket',
     ]);
 
     $response = $this->postJson("/api/tickets/{$ticket->id}/messages", [
@@ -85,7 +93,6 @@ test('validasi transisi status sesuai tabel', function () {
         'sla_fr_status' => 'done',
         'sla_resolution_status' => 'running',
     ]);
-
     $this->patchJson("/api/tickets/{$ticket->id}/status", ['status' => 'pending'], authHeaderFor($pic))
         ->assertOk()
         ->assertJsonPath('data.status', 'pending');
@@ -120,7 +127,6 @@ test('spv tidak bisa reply / ubah status ticket yang sudah di-assign ke pic', fu
         'sla_fr_status' => 'done',
         'sla_resolution_status' => 'running',
     ]);
-
     $this->postJson("/api/tickets/{$ticket->id}/messages", [
         'content' => 'Saya ambil alih ya.',
     ], authHeaderFor($spv))->assertStatus(403);
@@ -147,6 +153,13 @@ test('spv bisa reply & ubah status ticket fallback yang assigned ke spv', functi
         'sla_fr_status' => 'done',
         'sla_resolution_status' => 'running',
     ]);
+    Message::create([
+        'ticket_id' => $ticket->id,
+        'customer_id' => $customer->id,
+        'sender_type' => 'customer',
+        'content' => 'Mohon dibantu',
+        'wa_message_id' => 'wa-fallback-ticket',
+    ]);
 
     $this->postJson("/api/tickets/{$ticket->id}/messages", [
         'content' => 'Baik, saya bantu.',
@@ -156,4 +169,3 @@ test('spv bisa reply & ubah status ticket fallback yang assigned ke spv', functi
         'status' => 'pending',
     ], authHeaderFor($spv))->assertOk();
 });
-

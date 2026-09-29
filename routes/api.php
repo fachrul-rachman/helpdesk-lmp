@@ -12,6 +12,7 @@ use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Controllers\Pic\TakeoverRequestController as PicTakeoverRequestController;
 use App\Http\Controllers\Pic\TicketController as PicTicketController;
+use App\Http\Controllers\PushSubscriptionController;
 use App\Http\Controllers\Spv\AnalyticsController;
 use App\Http\Controllers\Spv\ConversationController;
 use App\Http\Controllers\Spv\PicLookupController;
@@ -32,9 +33,9 @@ Route::prefix('auth')->group(function (): void {
 });
 
 Route::prefix('push')->middleware(['auth.jwt', 'role:pic,spv', 'throttle:30,1'])->group(function (): void {
-    Route::get('config', [\App\Http\Controllers\PushSubscriptionController::class, 'config']);
-    Route::post('subscriptions', [\App\Http\Controllers\PushSubscriptionController::class, 'store']);
-    Route::delete('subscriptions', [\App\Http\Controllers\PushSubscriptionController::class, 'destroy']);
+    Route::get('config', [PushSubscriptionController::class, 'config']);
+    Route::post('subscriptions', [PushSubscriptionController::class, 'store']);
+    Route::delete('subscriptions', [PushSubscriptionController::class, 'destroy']);
 });
 
 Route::post('auth/force-logout/{user_id}', [AuthController::class, 'forceLogout'])
@@ -91,6 +92,7 @@ Route::middleware(['auth.jwt'])->group(function (): void {
 
     Route::get('tickets/{id}/messages', [TicketController::class, 'messagesIndex']);
     Route::post('tickets/{id}/messages', [TicketController::class, 'messagesStore']);
+    Route::post('tickets/{id}/resume-conversation', [TicketController::class, 'resumeConversation']);
 
     Route::get('attachments/{id}/url', [AttachmentController::class, 'url']);
 

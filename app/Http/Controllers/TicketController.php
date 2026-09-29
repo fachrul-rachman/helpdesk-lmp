@@ -8,14 +8,12 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class TicketController extends Controller
 {
-    public function __construct(private readonly TicketService $ticketService)
-    {
-    }
+    public function __construct(private readonly TicketService $ticketService) {}
 
     public function index(Request $request)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             throw new HttpException(401, 'Token tidak valid.');
         }
 
@@ -38,7 +36,7 @@ class TicketController extends Controller
     public function show(Request $request, string $id)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             throw new HttpException(401, 'Token tidak valid.');
         }
 
@@ -50,7 +48,7 @@ class TicketController extends Controller
     public function updateStatus(Request $request, string $id)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             throw new HttpException(401, 'Token tidak valid.');
         }
 
@@ -68,7 +66,7 @@ class TicketController extends Controller
     public function updateNotes(Request $request, string $id)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             throw new HttpException(401, 'Token tidak valid.');
         }
 
@@ -86,7 +84,7 @@ class TicketController extends Controller
     public function updateSubcategories(Request $request, string $id)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             throw new HttpException(401, 'Token tidak valid.');
         }
 
@@ -105,7 +103,7 @@ class TicketController extends Controller
     public function updateLocation(Request $request, string $id)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             throw new HttpException(401, 'Token tidak valid.');
         }
 
@@ -125,7 +123,7 @@ class TicketController extends Controller
     public function updateSubject(Request $request, string $id)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             throw new HttpException(401, 'Token tidak valid.');
         }
 
@@ -143,7 +141,7 @@ class TicketController extends Controller
     public function updateCustomerNotes(Request $request, string $id)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             throw new HttpException(401, 'Token tidak valid.');
         }
 
@@ -161,19 +159,20 @@ class TicketController extends Controller
     public function messagesIndex(Request $request, string $id)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             throw new HttpException(401, 'Token tidak valid.');
         }
 
         return response()->json([
             'data' => $this->ticketService->listMessages($user, $id),
+            'reply_window' => $this->ticketService->getReplyWindow($user, $id),
         ]);
     }
 
     public function messagesStore(Request $request, string $id)
     {
         $user = $request->user();
-        if (!$user) {
+        if (! $user) {
             throw new HttpException(401, 'Token tidak valid.');
         }
 
@@ -203,5 +202,29 @@ class TicketController extends Controller
         return response()->json([
             'data' => $this->ticketService->formatMessage($message),
         ], 201);
+    }
+
+    public function resumeConversation(Request $request, string $id)
+    {
+        $user = $request->user();
+        if (! $user) {
+            throw new HttpException(401, 'Token tidak valid.');
+        }
+
+        $validated = $request->validate([
+            'customer_name' => ['required', 'string', 'max:100'],
+            'summary' => ['required', 'string', 'max:250'],
+        ]);
+
+        $this->ticketService->sendResumeConversationTemplate(
+            $user,
+            $id,
+            (string) $validated['customer_name'],
+            (string) $validated['summary'],
+        );
+
+        return response()->json([
+            'message' => 'Pesan penghubung sedang dikirim ke customer.',
+        ], 202);
     }
 }

@@ -646,13 +646,10 @@ class TicketService
     {
         $ticket = $this->getTicketForUserOrFail($actor, $ticketId);
         $this->assertCanReply($actor, $ticket);
+        $this->assertTicketAcceptsReplies($ticket);
 
-        if ($ticket->status === 'queue') {
-            throw new HttpException(422, 'Ticket masih dalam antrian (queue).');
-        }
-
-        if (in_array((string) $ticket->status, ['solved', 'closed'], true)) {
-            throw new HttpException(422, 'Ticket sudah ditutup dan tidak bisa dibalas.');
+        if (! $this->replyWindowForTicket($ticket)['is_open']) {
+            throw new HttpException(422, 'Balasan langsung belum tersedia. Hubungi customer terlebih dahulu.');
         }
 
         $now = CarbonImmutable::now();
@@ -762,6 +759,43 @@ class TicketService
 
             return $message->fresh(['attachments', 'sender' => fn ($q) => $q->withTrashed(), 'customer' => fn ($q) => $q->withTrashed()]) ?? $message;
         });
+    }
+
+    /**
+     * @return array{is_open:bool,last_customer_message_at:?string,expires_at:?string}
+     */
+    public function getReplyWindow(User $user, string $ticketId): array
+    {
+        return $this->replyWindowForTicket($this->getTicketForUserOrFail($user, $ticketId));
+    }
+
+    public function sendResumeConversationTemplate(User $actor, string $ticketId, string $customerName, string $summary): void
+    {
+        $ticket = $this->getTicketForUserOrFail($actor, $ticketId);
+        $this->assertCanReply($actor, $ticket);
+        $this->assertTicketAcceptsReplies($ticket);
+
+        if ($this->replyWindowForTicket($ticket)['is_open']) {
+            throw new HttpException(422, 'Anda masih dapat membalas customer secara langsung.');
+        }
+
+        $toPhone = (string) ($ticket->customer?->phone_number ?? '');
+        if ($toPhone === '') {
+            throw new HttpException(422, 'Nomor WhatsApp customer tidak tersedia.');
+        }
+
+        $this->notificationService->sendResumeCustomerConversation(
+            $toPhone,
+            trim($customerName),
+            trim($summary),
+        );
+
+        AuditLogger::log(
+            action: 'conversation.resume_requested',
+            subject: $ticket,
+            payload: ['data' => ['customer_name' => trim($customerName), 'summary' => trim($summary)]],
+            user: $actor,
+        );
     }
 
     /**
@@ -1543,6 +1577,38 @@ class TicketService
         }
 
         throw new HttpException(403, 'Anda tidak memiliki akses ke halaman ini.');
+    }
+
+    private function assertTicketAcceptsReplies(Ticket $ticket): void
+    {
+        if ($ticket->status === 'queue') {
+            throw new HttpException(422, 'Ticket masih dalam antrian (queue).');
+        }
+
+        if (in_array((string) $ticket->status, ['solved', 'closed'], true)) {
+            throw new HttpException(422, 'Ticket sudah ditutup dan tidak bisa dibalas.');
+        }
+    }
+
+    /**
+     * @return array{is_open:bool,last_customer_message_at:?string,expires_at:?string}
+     */
+    private function replyWindowForTicket(Ticket $ticket): array
+    {
+        $value = Message::query()
+            ->where('customer_id', $ticket->customer_id)
+            ->where('sender_type', 'customer')
+            ->latest('created_at')
+            ->value('created_at');
+
+        $lastMessageAt = $value ? CarbonImmutable::parse($value) : null;
+        $expiresAt = $lastMessageAt?->addHours(24);
+
+        return [
+            'is_open' => $expiresAt !== null && CarbonImmutable::now()->lessThan($expiresAt),
+            'last_customer_message_at' => $lastMessageAt?->toISOString(),
+            'expires_at' => $expiresAt?->toISOString(),
+        ];
     }
 
     private function assertCanChangeStatus(User $actor, Ticket $ticket): void

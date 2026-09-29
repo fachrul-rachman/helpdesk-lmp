@@ -103,3 +103,9 @@ export type TicketMessage = {
     attachments: MessageAttachment[];
     created_at: string | null;
 };
+
+export type ReplyWindow = {
+    is_open: boolean;
+    last_customer_message_at: string | null;
+    expires_at: string | null;
+};

@@ -21,14 +21,20 @@ import { TicketSubcategoryFields } from '../../components/common/TicketSubcatego
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Textarea } from '../../components/ui/textarea';
+import { ResumeConversationForm } from '../tickets/ResumeConversationForm';
+import { useReplyWindow } from '../tickets/useReplyWindow';
 import { api } from '../../lib/axios';
 import { getEcho } from '../../lib/echo';
 import { cn } from '../../lib/utils';
 import { useAuthStore } from '../../stores/authStore';
-import type { TicketDetail, TicketMessage } from '../../types/ticket';
+import type {
+    ReplyWindow,
+    TicketDetail,
+    TicketMessage,
+} from '../../types/ticket';
 
 type TicketDetailResponse = { data: TicketDetail };
-type MessagesResponse = { data: TicketMessage[] };
+type MessagesResponse = { data: TicketMessage[]; reply_window: ReplyWindow };
 
 type DivisionOption = {
     id: string;
@@ -77,6 +83,8 @@ export function SpvTicketDetailPage() {
     const [isSending, setIsSending] = useState(false);
     const [sendError, setSendError] = useState<string | null>(null);
     const [files, setFiles] = useState<File[]>([]);
+    const { replyWindow, setReplyWindow, openFromCustomerMessage } =
+        useReplyWindow();
 
     const bottomRef = useRef<HTMLDivElement | null>(null);
     const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -128,6 +136,7 @@ export function SpvTicketDetailPage() {
                 if (!isMounted) return;
                 setTicket(ticketRes.data.data);
                 setMessages(msgsRes.data.data ?? []);
+                setReplyWindow(msgsRes.data.reply_window);
                 setDivisions(divRes.data.data ?? []);
 
                 setTicketNotesDraft(ticketRes.data.data.notes ?? '');
@@ -173,6 +182,9 @@ export function SpvTicketDetailPage() {
         const onMessageSent = (payload: any) => {
             const message = payload?.data as TicketMessage | undefined;
             if (!message?.id) return;
+            if (message.sender_type === 'customer') {
+                openFromCustomerMessage(message.created_at);
+            }
             setMessages((prev) =>
                 prev.some((m) => m.id === message.id)
                     ? prev
@@ -199,7 +211,7 @@ export function SpvTicketDetailPage() {
             channel.stopListening('.TicketStatusChanged');
             echo.leave(`ticket.${id}`);
         };
-    }, [id]);
+    }, [id, openFromCustomerMessage]);
 
     const resolution = formatSlaRemaining(ticket?.sla?.resolution_deadline_at);
     const frTone =
@@ -209,7 +221,7 @@ export function SpvTicketDetailPage() {
               ? 'ok'
               : 'muted';
 
-    const canReply = useMemo(() => {
+    const canManageConversation = useMemo(() => {
         if (!ticket || !currentUser) return false;
         if (ticket.status === 'solved' || ticket.status === 'closed')
             return false;
@@ -223,6 +235,10 @@ export function SpvTicketDetailPage() {
             ticket.assigned_to?.id === currentUser.id
         );
     }, [ticket, currentUser]);
+
+    const canReply = canManageConversation && replyWindow?.is_open === true;
+    const replyWindowExpired =
+        canManageConversation && replyWindow && !replyWindow.is_open;
 
     const allowedTransitions = useMemo<TicketStatus[]>(() => {
         if (!ticket) return [] as TicketStatus[];
@@ -989,7 +1005,7 @@ export function SpvTicketDetailPage() {
                         </div>
 
                         <div className="border-t border-slate-200 p-3">
-                            {!canReply ? (
+                            {!canManageConversation ? (
                                 <div className="mb-2 rounded-md border border-amber-200 bg-amber-50 p-2 text-sm text-amber-800">
                                     Anda hanya bisa membalas ticket fallback
                                     (assigned ke SPV).
@@ -1001,7 +1017,17 @@ export function SpvTicketDetailPage() {
                                 </div>
                             ) : null}
 
-                            {files.length ? (
+                            {replyWindowExpired ? (
+                                <ResumeConversationForm
+                                    ticketId={ticket.id}
+                                    customerName={
+                                        ticket.customer?.name ?? 'Customer'
+                                    }
+                                    summary={ticket.subject}
+                                />
+                            ) : null}
+
+                            {!replyWindowExpired && files.length ? (
                                 <div className="mb-3 space-y-2">
                                     {files.map((f, idx) => (
                                         <div
@@ -1036,7 +1062,12 @@ export function SpvTicketDetailPage() {
                                 </div>
                             ) : null}
 
-                            <div className="flex gap-2">
+                            <div
+                                className={cn(
+                                    'flex gap-2',
+                                    replyWindowExpired && 'hidden',
+                                )}
+                            >
                                 <input
                                     ref={fileInputRef}
                                     type="file"

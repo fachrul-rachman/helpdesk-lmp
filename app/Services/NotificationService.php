@@ -26,6 +26,8 @@ class NotificationService
 
     private const TEMPLATE_TICKET_REOPENED = 'ticket_on_progress_opened';
 
+    private const TEMPLATE_RESUME_CUSTOMER_CONVERSATION = 'resume_customer_conversation';
+
     public function sendText(string $toPhone, string $message): void
     {
         SendWhatsAppMessageJob::dispatch([
@@ -51,7 +53,7 @@ class NotificationService
         string $filename = '',
     ): void {
         $type = strtolower($type);
-        if (!in_array($type, ['image', 'video', 'document'], true)) {
+        if (! in_array($type, ['image', 'video', 'document'], true)) {
             throw new \InvalidArgumentException('Tipe media tidak didukung.');
         }
 
@@ -74,7 +76,7 @@ class NotificationService
     }
 
     /**
-     * @param  array<int, string>  $parameters Urutan harus sesuai {{1}}, {{2}}, dst.
+     * @param  array<int, string>  $parameters  Urutan harus sesuai {{1}}, {{2}}, dst.
      */
     public function sendTemplate(string $toPhone, string $templateName, array $parameters = []): void
     {
@@ -449,7 +451,7 @@ class NotificationService
     public function sendCustomerPendingReminder(Ticket $ticket, int $remainingMinutes = 60): void
     {
         $customer = $ticket->customer;
-        if (!$customer || !$customer->phone_number) {
+        if (! $customer || ! $customer->phone_number) {
             return;
         }
 
@@ -476,11 +478,19 @@ class NotificationService
         ]);
     }
 
+    public function sendResumeCustomerConversation(string $toPhone, string $customerName, string $summary): void
+    {
+        $this->sendTemplate($toPhone, self::TEMPLATE_RESUME_CUSTOMER_CONVERSATION, [
+            $customerName,
+            $summary,
+        ]);
+    }
+
     public function sendSatisfactionReview(Ticket $ticket): void
     {
         $ticket->loadMissing(['customer' => fn ($q) => $q->withTrashed()]);
         $customer = $ticket->customer;
-        if (!$customer || !$customer->phone_number) {
+        if (! $customer || ! $customer->phone_number) {
             return;
         }
 

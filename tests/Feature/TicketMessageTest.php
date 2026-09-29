@@ -42,7 +42,7 @@ function tmUser(string $role, ?string $divisionId = null): User
 
 function tmAuth(User $user): array
 {
-    return ['Authorization' => 'Bearer ' . JWTAuth::fromUser($user)];
+    return ['Authorization' => 'Bearer '.JWTAuth::fromUser($user)];
 }
 
 test('GET messages mengembalikan list pesan terurut dan POST messages membuat pesan', function () {
@@ -82,6 +82,13 @@ test('GET messages mengembalikan list pesan terurut dan POST messages membuat pe
         ->assertJsonCount(2, 'data')
         ->assertJsonPath('data.0.sender_type', 'customer')
         ->assertJsonPath('reply_window.is_open', true);
+
+    $this->postJson("/api/tickets/{$ticket->id}/resume-conversation", [
+        'customer_name' => 'Andi',
+        'summary' => 'masalah laptop',
+    ], tmAuth($pic))
+        ->assertStatus(422)
+        ->assertJsonPath('message', 'Anda masih dapat membalas customer secara langsung.');
 });
 
 test('balasan langsung ditolak jika customer tidak mengirim pesan dalam 24 jam terakhir', function () {
@@ -102,17 +109,18 @@ test('balasan langsung ditolak jika customer tidak mengirim pesan dalam 24 jam t
         'sla_resolution_status' => 'running',
     ]);
 
-    Message::create([
+    $oldMessage = Message::create([
         'ticket_id' => $ticket->id,
         'customer_id' => $customer->id,
         'sender_type' => 'customer',
         'content' => 'Mohon dibantu',
         'wa_message_id' => 'wa-expired',
-        'created_at' => now()->subHours(24)->subSecond(),
     ]);
+    $oldMessage->forceFill(['created_at' => CarbonImmutable::parse('2026-09-27 03:29:59')])->save();
 
     $this->getJson("/api/tickets/{$ticket->id}/messages", tmAuth($pic))
         ->assertOk()
+        ->assertJsonPath('reply_window.last_customer_message_at', '2026-09-27T03:29:59.000000Z')
         ->assertJsonPath('reply_window.is_open', false);
 
     $this->postJson("/api/tickets/{$ticket->id}/messages", [
@@ -154,14 +162,14 @@ test('PIC dapat mengirim template untuk meminta customer melanjutkan percakapan'
         'sla_resolution_status' => 'running',
     ]);
 
-    Message::create([
+    $oldMessage = Message::create([
         'ticket_id' => $ticket->id,
         'customer_id' => $customer->id,
         'sender_type' => 'customer',
         'content' => 'Mohon dibantu',
         'wa_message_id' => 'wa-expired',
-        'created_at' => now()->subDays(2),
     ]);
+    $oldMessage->forceFill(['created_at' => CarbonImmutable::parse('2026-09-26 03:30:00')])->save();
 
     $this->postJson("/api/tickets/{$ticket->id}/resume-conversation", [
         'customer_name' => 'Ibu Henni',
