@@ -78,7 +78,7 @@ class NotificationService
     /**
      * @param  array<int, string>  $parameters  Urutan harus sesuai {{1}}, {{2}}, dst.
      */
-    public function sendTemplate(string $toPhone, string $templateName, array $parameters = []): void
+    public function sendTemplate(string $toPhone, string $templateName, array $parameters = [], ?string $urlButtonParameter = null): void
     {
         $components = [];
         if ($parameters !== []) {
@@ -90,6 +90,8 @@ class NotificationService
                 ),
             ];
         }
+
+        $components = [...$components, ...$this->urlButtonComponents($urlButtonParameter)];
 
         SendWhatsAppMessageJob::dispatch([
             'messaging_product' => 'whatsapp',
@@ -119,42 +121,32 @@ class NotificationService
         array $bodyParameters,
         string $urlButtonParameter,
     ): void {
-        $components = [];
+        $this->sendTemplate($toPhone, $templateName, $bodyParameters, $urlButtonParameter);
+    }
 
-        if ($bodyParameters !== []) {
-            $components[] = [
-                'type' => 'body',
-                'parameters' => array_map(
-                    fn (string $text) => ['type' => 'text', 'text' => $text],
-                    $bodyParameters,
-                ),
-            ];
+    private function ticketUrlParameter(User $recipient, Ticket $ticket, string $templateName): ?string
+    {
+        if (! in_array($templateName, config('services.meta_whatsapp.ticket_url_templates', []), true)) {
+            return null;
         }
 
-        $components[] = [
+        return "{$recipient->role}/tickets/{$ticket->id}";
+    }
+
+    private function urlButtonComponents(?string $parameter): array
+    {
+        if ($parameter === null) {
+            return [];
+        }
+
+        return [[
             'type' => 'button',
             'sub_type' => 'url',
             'index' => '0',
             'parameters' => [
-                ['type' => 'text', 'text' => $urlButtonParameter],
+                ['type' => 'text', 'text' => $parameter],
             ],
-        ];
-
-        SendWhatsAppMessageJob::dispatch([
-            'messaging_product' => 'whatsapp',
-            'recipient_type' => 'individual',
-            'to' => $toPhone,
-            'type' => 'template',
-            'template' => [
-                'name' => $templateName,
-                'language' => ['code' => 'id'],
-                'components' => $components,
-            ],
-        ], [
-            'to' => $toPhone,
-            'type' => 'template',
-            'template' => $templateName,
-        ]);
+        ]];
     }
 
     public function markAsRead(string $waMessageId, string $typingType = 'text'): void
@@ -201,9 +193,9 @@ class NotificationService
 
         $parameters = $this->buildAssignedTicketTemplateParameters($ticket);
 
-        $this->dispatchAssignedTicketTemplate($agent->phone_number, $parameters);
+        $this->dispatchAssignedTicketTemplate($agent, $ticket, $parameters);
 
-        $this->sendNewTicketCopyToSpv($agent, $parameters);
+        $this->sendNewTicketCopyToSpv($agent, $ticket, $parameters);
     }
 
     /**
@@ -255,12 +247,12 @@ class NotificationService
     /**
      * @param  array{ticket_number:string,customer_name:string,title:string,summary:string}  $parameters
      */
-    private function dispatchAssignedTicketTemplate(string $toPhone, array $parameters): void
+    private function dispatchAssignedTicketTemplate(User $recipient, Ticket $ticket, array $parameters): void
     {
         SendWhatsAppMessageJob::dispatch([
             'messaging_product' => 'whatsapp',
             'recipient_type' => 'individual',
-            'to' => $toPhone,
+            'to' => $recipient->phone_number,
             'type' => 'template',
             'template' => [
                 'name' => self::TEMPLATE_TICKET_ASSIGNED,
@@ -275,10 +267,11 @@ class NotificationService
                             ['type' => 'text', 'text' => $parameters['summary'], 'parameter_name' => 'ringkasan'],
                         ],
                     ],
+                    ...$this->urlButtonComponents($this->ticketUrlParameter($recipient, $ticket, self::TEMPLATE_TICKET_ASSIGNED)),
                 ],
             ],
         ], [
-            'to' => $toPhone,
+            'to' => $recipient->phone_number,
             'type' => 'template',
             'template' => self::TEMPLATE_TICKET_ASSIGNED,
         ]);
@@ -287,7 +280,7 @@ class NotificationService
     /**
      * @param  array{ticket_number:string,customer_name:string,title:string,summary:string}  $parameters
      */
-    private function sendNewTicketCopyToSpv(User $agent, array $parameters): void
+    private function sendNewTicketCopyToSpv(User $agent, Ticket $ticket, array $parameters): void
     {
         if ($agent->role !== 'pic') {
             return;
@@ -310,7 +303,7 @@ class NotificationService
             return;
         }
 
-        $this->dispatchAssignedTicketTemplate($spv->phone_number, $parameters);
+        $this->dispatchAssignedTicketTemplate($spv, $ticket, $parameters);
     }
 
     public function sendPicSlaFrWarning(User $pic, Ticket $ticket, int $remainingMinutes): void
@@ -352,6 +345,7 @@ class NotificationService
                             ['type' => 'text', 'text' => $remainingLabel, 'parameter_name' => 'sisa_waktu'],
                         ],
                     ],
+                    ...$this->urlButtonComponents($this->ticketUrlParameter($pic, $ticket, self::TEMPLATE_SLA_FR_WARNING)),
                 ],
             ],
         ], [
@@ -370,7 +364,7 @@ class NotificationService
             (string) $ticket->subject,
             $customerName !== '' ? $customerName : 'Customer',
             $deadline->timezone('Asia/Jakarta')->translatedFormat('d M Y H:i'),
-        ]);
+        ], $this->ticketUrlParameter($pic, $ticket, self::TEMPLATE_SLA_RESOLUTION_WARNING));
     }
 
     public function sendPicTicketReopened(User $pic, Ticket $ticket): void
@@ -381,7 +375,7 @@ class NotificationService
             $pic->name,
             (string) $ticket->subject,
             $customerName !== '' ? $customerName : 'Customer',
-        ]);
+        ], $this->ticketUrlParameter($pic, $ticket, self::TEMPLATE_TICKET_REOPENED));
     }
 
     public function sendSpvSlaFrOverdue(User $spv, Ticket $ticket): void
@@ -424,6 +418,7 @@ class NotificationService
                             ['type' => 'text', 'text' => $title, 'parameter_name' => 'judul_ticket'],
                         ],
                     ],
+                    ...$this->urlButtonComponents($this->ticketUrlParameter($spv, $ticket, self::TEMPLATE_SLA_FR_BREACHED)),
                 ],
             ],
         ], [
@@ -445,7 +440,7 @@ class NotificationService
             $divisionName !== '' ? $divisionName : '-',
             $picName !== '' ? $picName : 'Belum di-assign',
             $lateHumanReadable,
-        ]);
+        ], $this->ticketUrlParameter($spv, $ticket, self::TEMPLATE_SLA_RESOLUTION_BREACHED));
     }
 
     public function sendCustomerPendingReminder(Ticket $ticket, int $remainingMinutes = 60): void

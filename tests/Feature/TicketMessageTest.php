@@ -13,6 +13,11 @@ use Tymon\JWTAuth\Facades\JWTAuth;
 
 uses(RefreshDatabase::class);
 
+beforeEach(function () {
+    Http::preventStrayRequests();
+    Http::fake(['https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.test']]], 200)]);
+});
+
 function tmDivision(): Division
 {
     return Division::create([

@@ -33,3 +33,14 @@ yarn-error.log
 /n8n.md
 /postman_collection.json
 Design Full
+
+# Private presentation sources, screenshots, and deliverables
+/.presentation-build/
+/outputs/onboarding/
+*.ppt
+*.pptx
+*.pptm
+*.potx
+*.potm
+*.ppsx
+*.ppsm

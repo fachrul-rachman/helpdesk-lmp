@@ -20,6 +20,7 @@ return [
         'api_url' => env('META_WA_API_URL', 'https://graph.facebook.com/v18.0'),
         'waba_id' => env('META_WA_WABA_ID'),
         'typing_indicator_enabled' => env('META_WA_TYPING_INDICATOR_ENABLED', true),
+        'ticket_url_templates' => array_values(array_filter(array_map('trim', explode(',', (string) env('META_WA_TICKET_URL_TEMPLATES', ''))))),
     ],
 
     'n8n' => [
