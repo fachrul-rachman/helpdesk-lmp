@@ -19,6 +19,7 @@ use App\Http\Controllers\Spv\PicLookupController;
 use App\Http\Controllers\Spv\TakeoverRequestController as SpvTakeoverRequestController;
 use App\Http\Controllers\Spv\TicketController as SpvTicketController;
 use App\Http\Controllers\Spv\TicketExportController;
+use App\Http\Controllers\Spv\TicketReportController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketSubcategoryController;
 use App\Http\Controllers\Webhook\N8nWebhookController;
@@ -99,7 +100,10 @@ Route::middleware(['auth.jwt'])->group(function (): void {
     Route::patch('customers/{id}/notes', [TicketController::class, 'updateCustomerNotes']);
 
     Route::prefix('spv')->middleware('role:spv')->group(function (): void {
-        Route::get('tickets/export', TicketExportController::class);
+        Route::get('reports', [TicketReportController::class, 'index'])->middleware('throttle:60,1');
+        Route::get('reports/tickets', [TicketReportController::class, 'tickets'])->middleware('throttle:60,1');
+        Route::get('reports/reviews', [TicketReportController::class, 'reviews'])->middleware('throttle:60,1');
+        Route::get('tickets/export', TicketExportController::class)->middleware('throttle:10,1');
         Route::post('tickets', [SpvTicketController::class, 'store']);
         Route::get('customers/{id}/tickets', [SpvTicketController::class, 'customerTickets']);
         Route::get('analytics', AnalyticsController::class);

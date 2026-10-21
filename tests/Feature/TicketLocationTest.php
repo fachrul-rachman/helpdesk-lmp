@@ -5,9 +5,14 @@ use App\Models\Division;
 use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    Http::fake(['https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.test']]], 200)]);
+});
 
 function locationDivision(): Division
 {

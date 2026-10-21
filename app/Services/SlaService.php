@@ -12,13 +12,30 @@ use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class SlaService
 {
+    private ?array $calendarCache = null;
+
+    public function withCachedCalendar(callable $callback): mixed
+    {
+        $previous = $this->calendarCache;
+        $this->calendarCache = [
+            'hours' => DivisionWorkingHour::all()->groupBy('division_id'),
+            'holidays' => PublicHoliday::pluck('date')->mapWithKeys(fn ($date) => [substr((string) $date, 0, 10) => true])->all(),
+        ];
+
+        try {
+            return $callback();
+        } finally {
+            $this->calendarCache = $previous;
+        }
+    }
+
     public function calculateDeadline(CarbonImmutable $startAt, int $durationMinutes, string $divisionId): CarbonImmutable
     {
         if ($durationMinutes <= 0) {
             return $startAt;
         }
 
-        if (!$this->hasWorkingHours($divisionId)) {
+        if (! $this->hasWorkingHours($divisionId)) {
             return $startAt->addMinutes($durationMinutes);
         }
 
@@ -29,8 +46,9 @@ class SlaService
 
         while ($remaining > 0) {
             $working = $this->workingWindowForDate($cursor, $divisionId);
-            if (!$working) {
+            if (! $working) {
                 $cursor = $this->nextWorkingStart($cursor->addDay()->startOfDay(), $divisionId);
+
                 continue;
             }
 
@@ -43,6 +61,7 @@ class SlaService
 
             if ($cursor->greaterThanOrEqualTo($end)) {
                 $cursor = $this->nextWorkingStart($cursor->addDay()->startOfDay(), $divisionId);
+
                 continue;
             }
 
@@ -65,7 +84,7 @@ class SlaService
             return 0;
         }
 
-        if (!$this->hasWorkingHours($divisionId)) {
+        if (! $this->hasWorkingHours($divisionId)) {
             return $startAt->diffInMinutes($endAt);
         }
 
@@ -78,8 +97,9 @@ class SlaService
 
         while ($cursor->toDateString() <= $endAt->toDateString()) {
             $dayWindow = $this->workingWindowForDate($cursor, $divisionId);
-            if (!$dayWindow) {
+            if (! $dayWindow) {
                 $cursor = $cursor->addDay()->startOfDay();
+
                 continue;
             }
 
@@ -103,7 +123,7 @@ class SlaService
     {
         /** @var Ticket|null $ticket */
         $ticket = Ticket::query()->find($ticketId);
-        if (!$ticket) {
+        if (! $ticket) {
             throw new HttpException(404, 'Ticket tidak ditemukan.');
         }
 
@@ -127,11 +147,11 @@ class SlaService
     {
         /** @var Ticket|null $ticket */
         $ticket = Ticket::query()->find($ticketId);
-        if (!$ticket) {
+        if (! $ticket) {
             throw new HttpException(404, 'Ticket tidak ditemukan.');
         }
 
-        if (!$ticket->sla_resolution_paused_at) {
+        if (! $ticket->sla_resolution_paused_at) {
             return;
         }
 
@@ -169,7 +189,7 @@ class SlaService
     {
         /** @var Ticket|null $ticket */
         $ticket = Ticket::query()->find($ticketId);
-        if (!$ticket) {
+        if (! $ticket) {
             throw new HttpException(404, 'Ticket tidak ditemukan.');
         }
 
@@ -189,7 +209,7 @@ class SlaService
     public function divisionResolutionMinutes(string $divisionId): int
     {
         $division = DB::table('divisions')->select(['sla_resolution_value', 'sla_resolution_unit'])->where('id', $divisionId)->first();
-        if (!$division) {
+        if (! $division) {
             return 60 * 24 * 3;
         }
 
@@ -234,24 +254,29 @@ class SlaService
      */
     private function workingWindowForDate(CarbonImmutable $date, string $divisionId): ?array
     {
-        if (PublicHoliday::query()->whereDate('date', $date->toDateString())->exists()) {
+        $isHoliday = $this->calendarCache !== null
+            ? isset($this->calendarCache['holidays'][$date->toDateString()])
+            : PublicHoliday::query()->whereDate('date', $date->toDateString())->exists();
+        if ($isHoliday) {
             return null;
         }
 
         $day = strtolower($date->englishDayOfWeek);
 
         /** @var DivisionWorkingHour|null $wh */
-        $wh = DivisionWorkingHour::query()
-            ->where('division_id', $divisionId)
-            ->where('day_of_week', $day)
-            ->first();
+        $wh = $this->calendarCache !== null
+            ? ($this->calendarCache['hours'][$divisionId] ?? collect())->firstWhere('day_of_week', $day)
+            : DivisionWorkingHour::query()
+                ->where('division_id', $divisionId)
+                ->where('day_of_week', $day)
+                ->first();
 
-        if (!$wh || !$wh->is_active) {
+        if (! $wh || ! $wh->is_active) {
             return null;
         }
 
-        $start = CarbonImmutable::parse($date->toDateString() . ' ' . substr((string) $wh->start_time, 0, 5), $date->getTimezone());
-        $end = CarbonImmutable::parse($date->toDateString() . ' ' . substr((string) $wh->end_time, 0, 5), $date->getTimezone());
+        $start = CarbonImmutable::parse($date->toDateString().' '.substr((string) $wh->start_time, 0, 5), $date->getTimezone());
+        $end = CarbonImmutable::parse($date->toDateString().' '.substr((string) $wh->end_time, 0, 5), $date->getTimezone());
 
         if ($end->lessThanOrEqualTo($start)) {
             return null;
@@ -262,6 +287,10 @@ class SlaService
 
     private function hasWorkingHours(string $divisionId): bool
     {
+        if ($this->calendarCache !== null) {
+            return ($this->calendarCache['hours'][$divisionId] ?? collect())->contains('is_active', true);
+        }
+
         return DivisionWorkingHour::query()
             ->where('division_id', $divisionId)
             ->where('is_active', true)

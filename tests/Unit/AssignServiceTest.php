@@ -7,9 +7,14 @@ use App\Models\User;
 use App\Services\AssignService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 uses(TestCase::class, RefreshDatabase::class);
+
+beforeEach(function () {
+    Http::fake(['https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.test']]], 200)]);
+});
 
 function asDivision(array $overrides = []): Division
 {

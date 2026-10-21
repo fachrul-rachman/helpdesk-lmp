@@ -1,162 +1,119 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { PriorityBadge, StatusBadge } from '../../components/common/badges';
-import type {
-    TicketPriority,
-    TicketStatus,
-} from '../../components/common/badges';
-import { formatDateTimeId } from '../../components/common/format';
+import { formatDateId, formatDateTimeId } from '../../components/common/format';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { api } from '../../lib/axios';
 import { getEcho } from '../../lib/echo';
-import { cn } from '../../lib/utils';
 import type { ApiListResponse, TicketListItem } from '../../types/ticket';
 
-const statusOptions: Array<{ value: '' | TicketStatus; label: string }> = [
-    { value: '', label: 'Semua Status' },
-    { value: 'new', label: 'Baru' },
-    { value: 'open', label: 'Open' },
-    { value: 'pending', label: 'Pending' },
-    { value: 'on_progress', label: 'On Progress' },
-    { value: 'queue', label: 'Antrian' },
-    { value: 'solved', label: 'Solved' },
-    { value: 'closed', label: 'Closed' },
-];
-
-const priorityOptions: Array<{ value: '' | TicketPriority; label: string }> = [
-    { value: '', label: 'Semua Prioritas' },
-    { value: 'high', label: 'Tinggi' },
-    { value: 'medium', label: 'Sedang' },
-    { value: 'low', label: 'Rendah' },
-];
-
-type ExportPeriod = 'week' | 'month' | 'year' | 'custom';
-
-const exportPeriodOptions: Array<{ value: ExportPeriod; label: string }> = [
-    { value: 'week', label: 'Minggu ini' },
-    { value: 'month', label: 'Bulan ini' },
-    { value: 'year', label: 'Tahun ini' },
-    { value: 'custom', label: 'Tanggal bebas' },
-];
+import { reportSelectClass, reportStatuses } from './reportFilters';
+import { TicketExportPanel } from './TicketExportPanel';
 
 export function SpvTicketsPage() {
-    const [items, setItems] = useState<TicketListItem[]>([]);
-    const [isLoading, setIsLoading] = useState(true);
-    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [searchParams] = useSearchParams();
 
-    const [search, setSearch] = useState('');
-    const [status, setStatus] = useState<'' | TicketStatus>('');
-    const [priority, setPriority] = useState<'' | TicketPriority>('');
-    const [hasRequest, setHasRequest] = useState(false);
-    const [exportPeriod, setExportPeriod] = useState<ExportPeriod>('month');
-    const [exportStartDate, setExportStartDate] = useState('');
-    const [exportEndDate, setExportEndDate] = useState('');
-    const [isExporting, setIsExporting] = useState(false);
-    const [exportError, setExportError] = useState<string | null>(null);
+    return (
+        <SpvTicketsList
+            key={searchParams.toString()}
+            searchParams={searchParams}
+        />
+    );
+}
 
-    async function exportTickets() {
-        if (
-            exportPeriod === 'custom' &&
-            (!exportStartDate ||
-                !exportEndDate ||
-                exportEndDate < exportStartDate)
-        ) {
-            setExportError(
-                'Isi rentang tanggal yang valid. Tanggal akhir tidak boleh sebelum tanggal awal.',
-            );
+function SpvTicketsList({ searchParams }: { searchParams: URLSearchParams }) {
+    const reportMode = searchParams.get('report') === '1';
+    const [draft, setDraft] = useState({
+        search: '',
+        status: searchParams.get('status') ?? '',
+        priority: '',
+        hasRequest: false,
+    });
+    const [applied, setApplied] = useState(draft);
+    const [page, setPage] = useState(1);
+    const [revision, setRevision] = useState(0);
+    const [result, setResult] = useState<{
+        key: string;
+        items: TicketListItem[];
+        total: number;
+        error?: string;
+    } | null>(null);
+    const params = reportMode
+        ? new URLSearchParams(searchParams)
+        : new URLSearchParams();
+    params.delete('report');
+    params.set('per_page', '50');
+    params.set('page', String(page));
 
-            return;
-        }
-
-        setIsExporting(true);
-        setExportError(null);
-
-        try {
-            const response = await api.get<Blob>('/api/spv/tickets/export', {
-                params: {
-                    period: exportPeriod,
-                    start_date:
-                        exportPeriod === 'custom' ? exportStartDate : undefined,
-                    end_date:
-                        exportPeriod === 'custom' ? exportEndDate : undefined,
-                },
-                responseType: 'blob',
-            });
-            const disposition = String(
-                response.headers['content-disposition'] ?? '',
-            );
-            const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
-            const filename =
-                filenameMatch?.[1] ?? 'rekap-data-respons-tiket.xlsx';
-            const url = window.URL.createObjectURL(response.data);
-            const anchor = document.createElement('a');
-            anchor.href = url;
-            anchor.download = filename;
-            document.body.appendChild(anchor);
-            anchor.click();
-            anchor.remove();
-            window.URL.revokeObjectURL(url);
-        } catch {
-            setExportError('Export gagal dibuat. Silakan coba lagi.');
-        } finally {
-            setIsExporting(false);
-        }
+    if (applied.search.trim()) {
+        params.set('search', applied.search.trim());
     }
 
-    async function load() {
-        setIsLoading(true);
-        setErrorMessage(null);
-
-        try {
-            const response = await api.get<ApiListResponse<TicketListItem>>(
-                '/api/tickets',
-                {
-                    params: {
-                        per_page: 50,
-                        page: 1,
-                        search: search.trim() || undefined,
-                        status: status || undefined,
-                        priority: priority || undefined,
-                        has_request: hasRequest ? true : undefined,
-                    },
-                },
-            );
-            setItems(response.data.data ?? []);
-        } catch (error: any) {
-            const message =
-                error?.response?.data?.message ??
-                'Gagal memuat ticket. Silakan coba lagi.';
-            setErrorMessage(String(message));
-        } finally {
-            setIsLoading(false);
-        }
+    if (applied.status) {
+        params.set('status', applied.status);
+    } else {
+        params.delete('status');
     }
+
+    if (applied.priority) {
+        params.set('priority', applied.priority);
+    }
+
+    if (applied.hasRequest) {
+        params.set('has_request', '1');
+    }
+
+    const url = `${reportMode ? '/api/spv/reports/tickets' : '/api/tickets'}?${params}`;
+    const key = `${url}:${revision}`;
 
     useEffect(() => {
-        // Initial page data is loaded when the realtime subscription is installed.
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        load();
-        const echo = getEcho();
-        const channel = echo.private('dashboard.spv');
-        const handler = () => load();
-        channel.listen('.TicketCreated', handler);
-        channel.listen('.TicketAssigned', handler);
-        channel.listen('.TicketStatusChanged', handler);
-        channel.listen('.MessageSent', handler);
+        const controller = new AbortController();
+        api.get<ApiListResponse<TicketListItem>>(url, {
+            signal: controller.signal,
+        })
+            .then((response) =>
+                setResult({
+                    key,
+                    items: response.data.data,
+                    total: response.data.meta.total,
+                }),
+            )
+            .catch(() => {
+                if (!controller.signal.aborted) {
+                    setResult({
+                        key,
+                        items: [],
+                        total: 0,
+                        error: 'Gagal memuat ticket. Silakan coba lagi.',
+                    });
+                }
+            });
+
+        return () => controller.abort();
+    }, [url, key]);
+
+    useEffect(() => {
+        const echo = getEcho(),
+            channel = echo.private('dashboard.spv');
+        const events = [
+            '.TicketCreated',
+            '.TicketAssigned',
+            '.TicketStatusChanged',
+            '.MessageSent',
+        ];
+        const handler = () => setRevision((value) => value + 1);
+        events.forEach((event) => channel.listen(event, handler));
 
         return () => {
-            channel.stopListening('.TicketCreated');
-            channel.stopListening('.TicketAssigned');
-            channel.stopListening('.TicketStatusChanged');
-            channel.stopListening('.MessageSent');
+            events.forEach((event) => channel.stopListening(event, handler));
             echo.leave('dashboard.spv');
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const filtered = useMemo(() => items, [items]);
+    const loading = result?.key !== key;
+    const items = !loading ? result.items : [];
 
     return (
         <div className="space-y-4">
@@ -164,213 +121,227 @@ export function SpvTicketsPage() {
                 <h1 className="text-lg font-semibold text-slate-900">
                     Semua Ticket
                 </h1>
-                <Link
-                    to="/spv/tickets/create"
-                    className="hidden lg:inline-flex"
-                >
-                    <Button>Buat Ticket</Button>
-                </Link>
+                <Button asChild className="hidden lg:inline-flex">
+                    <Link to="/spv/tickets/create">Buat Ticket</Link>
+                </Button>
             </div>
-
-            <section
-                className="rounded-xl bg-white p-4 ring-1 ring-slate-200"
-                aria-labelledby="export-ticket-title"
-            >
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            {reportMode && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50 p-3">
                     <div>
-                        <h2
-                            id="export-ticket-title"
-                            className="text-sm font-semibold text-slate-900"
-                        >
-                            Export rekap ticket
-                        </h2>
-                        <p className="mt-1 text-xs text-slate-600">
-                            Mengunduh ticket solved dan closed berdasarkan
-                            tanggal ticket dibuat.
+                        <p className="text-sm font-medium text-blue-900">
+                            Hasil pilihan laporan
                         </p>
+                        <p className="mt-1 text-xs text-blue-800">
+                            {formatDateId(searchParams.get('start_date'))}{' '}
+                            sampai {formatDateId(searchParams.get('end_date'))}
+                        </p>
+                        {searchParams.get('filter') === 'unreviewed' && (
+                            <p className="mt-1 text-xs text-blue-800">
+                                Belum mengisi ulasan, berdasarkan tanggal solved
+                            </p>
+                        )}
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2 lg:flex lg:items-end">
-                        <label className="grid gap-1 text-xs font-medium text-slate-700">
-                            Periode
-                            <select
-                                className="h-10 min-w-40 rounded-md border border-slate-200 bg-white px-3 text-sm font-normal focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                                value={exportPeriod}
-                                onChange={(event) =>
-                                    setExportPeriod(
-                                        event.target.value as ExportPeriod,
-                                    )
-                                }
+                    <div className="flex flex-wrap gap-2">
+                        <Button asChild variant="outline">
+                            <Link to="/spv/reports">Laporan</Link>
+                        </Button>
+                        <Button asChild variant="outline">
+                            <Link
+                                to="/spv/tickets"
+                                onClick={() => {
+                                    const empty = {
+                                        search: '',
+                                        status: '',
+                                        priority: '',
+                                        hasRequest: false,
+                                    };
+                                    setDraft(empty);
+                                    setApplied(empty);
+                                    setPage(1);
+                                }}
                             >
-                                {exportPeriodOptions.map((option) => (
-                                    <option
-                                        key={option.value}
-                                        value={option.value}
-                                    >
-                                        {option.label}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-                        {exportPeriod === 'custom' ? (
-                            <>
-                                <label className="grid gap-1 text-xs font-medium text-slate-700">
-                                    Tanggal awal
-                                    <Input
-                                        type="date"
-                                        value={exportStartDate}
-                                        onChange={(event) =>
-                                            setExportStartDate(
-                                                event.target.value,
-                                            )
-                                        }
-                                    />
-                                </label>
-                                <label className="grid gap-1 text-xs font-medium text-slate-700">
-                                    Tanggal akhir
-                                    <Input
-                                        type="date"
-                                        min={exportStartDate || undefined}
-                                        value={exportEndDate}
-                                        onChange={(event) =>
-                                            setExportEndDate(event.target.value)
-                                        }
-                                    />
-                                </label>
-                            </>
-                        ) : null}
-                        <Button onClick={exportTickets} disabled={isExporting}>
-                            {isExporting ? 'Menyiapkan...' : 'Download XLSX'}
+                                Hapus filter laporan
+                            </Link>
                         </Button>
                     </div>
                 </div>
-                {exportError ? (
-                    <p className="mt-3 text-sm text-red-700" role="alert">
-                        {exportError}
-                    </p>
-                ) : null}
-            </section>
-
-            <div className="rounded-xl bg-white p-3 ring-1 ring-slate-200">
-                <div className="grid gap-2 sm:grid-cols-3">
-                    <Input
-                        placeholder="Cari nomor ticket / subject / nama customer..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                    />
-                    <select
-                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        value={status}
-                        onChange={(e) =>
-                            setStatus((e.target.value as any) || '')
-                        }
-                    >
-                        {statusOptions.map((o) => (
-                            <option key={o.label} value={o.value}>
-                                {o.label}
-                            </option>
-                        ))}
-                    </select>
-                    <select
-                        className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-                        value={priority}
-                        onChange={(e) =>
-                            setPriority((e.target.value as any) || '')
-                        }
-                    >
-                        {priorityOptions.map((o) => (
-                            <option key={o.label} value={o.value}>
-                                {o.label}
-                            </option>
-                        ))}
-                    </select>
-                    <label className="flex items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+            )}
+            <TicketExportPanel />
+            <form
+                className="rounded-xl border border-slate-200 bg-white p-3"
+                onSubmit={(event) => {
+                    event.preventDefault();
+                    setApplied(draft);
+                    setPage(1);
+                    setRevision((value) => value + 1);
+                }}
+            >
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <label className="grid gap-1 text-xs text-slate-600">
+                        Cari ticket
+                        <Input
+                            placeholder="Nomor, judul, atau customer"
+                            className="min-h-11 text-base sm:text-sm"
+                            value={draft.search}
+                            onChange={(event) =>
+                                setDraft({
+                                    ...draft,
+                                    search: event.target.value,
+                                })
+                            }
+                        />
+                    </label>
+                    <label className="grid gap-1 text-xs text-slate-600">
+                        Status
+                        <select
+                            className={reportSelectClass}
+                            value={draft.status}
+                            onChange={(event) =>
+                                setDraft({
+                                    ...draft,
+                                    status: event.target.value,
+                                })
+                            }
+                        >
+                            <option value="">Semua status</option>
+                            {reportStatuses.map((status) => (
+                                <option key={status.value} value={status.value}>
+                                    {status.label}
+                                </option>
+                            ))}
+                        </select>
+                    </label>
+                    <label className="grid gap-1 text-xs text-slate-600">
+                        Prioritas
+                        <select
+                            className={reportSelectClass}
+                            value={draft.priority}
+                            onChange={(event) =>
+                                setDraft({
+                                    ...draft,
+                                    priority: event.target.value,
+                                })
+                            }
+                        >
+                            <option value="">Semua prioritas</option>
+                            <option value="high">Tinggi</option>
+                            <option value="medium">Sedang</option>
+                            <option value="low">Rendah</option>
+                        </select>
+                    </label>
+                    <label className="flex min-h-11 items-center gap-2 text-sm text-slate-700">
                         <input
                             type="checkbox"
                             className="h-4 w-4"
-                            checked={hasRequest}
-                            onChange={(e) => setHasRequest(e.target.checked)}
+                            checked={draft.hasRequest}
+                            onChange={(event) =>
+                                setDraft({
+                                    ...draft,
+                                    hasRequest: event.target.checked,
+                                })
+                            }
                         />
-                        Hanya yang ada request takeover
+                        Hanya request takeover
                     </label>
                 </div>
                 <div className="mt-3 flex justify-end">
                     <Button
+                        type="submit"
                         variant="secondary"
-                        onClick={load}
-                        disabled={isLoading}
+                        disabled={loading}
                     >
-                        {isLoading ? 'Memuat...' : 'Terapkan Filter'}
+                        Terapkan Filter
                     </Button>
                 </div>
-            </div>
-
-            {isLoading ? (
-                <div className="text-sm text-slate-600">Memuat ticket...</div>
-            ) : errorMessage ? (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-                    {errorMessage}
-                </div>
-            ) : filtered.length === 0 ? (
-                <div className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
+            </form>
+            {loading ? (
+                <p role="status" className="text-sm text-slate-600">
+                    Memuat ticket...
+                </p>
+            ) : result.error ? (
+                <p
+                    role="alert"
+                    className="rounded-lg bg-red-50 p-4 text-sm text-red-700"
+                >
+                    {result.error}
+                </p>
+            ) : items.length === 0 ? (
+                <p className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
                     Tidak ada ticket.
-                </div>
+                </p>
             ) : (
-                <div className="space-y-3">
-                    {filtered.map((t) => (
-                        <Link
-                            key={t.id}
-                            to={`/spv/tickets/${t.id}`}
-                            className={cn(
-                                'block rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-200 hover:ring-slate-300',
-                            )}
-                        >
-                            <div className="flex items-start justify-between gap-3">
-                                <div className="min-w-0">
-                                    {t.ticket_number ? (
-                                        <div className="text-xs font-semibold text-slate-500">
-                                            {t.ticket_number}
-                                        </div>
-                                    ) : null}
-                                    <div className="truncate text-sm font-semibold text-slate-900">
-                                        {t.subject}
-                                    </div>
-                                    <div className="mt-1 text-xs text-slate-600">
-                                        {(t.customer?.name ??
-                                            t.customer?.phone_number ??
-                                            '-') + ''}
-                                        {t.division?.name
-                                            ? ` - ${t.division.name}`
-                                            : ''}
-                                    </div>
-                                </div>
-                                <div className="shrink-0 text-right text-xs text-slate-500">
-                                    {formatDateTimeId(t.created_at)}
-                                </div>
-                            </div>
-                            <div className="mt-3 flex flex-wrap items-center gap-2">
-                                <StatusBadge status={t.status} />
-                                <PriorityBadge priority={t.priority} />
-                                {t.has_takeover_request ? (
-                                    <span
-                                        className={cn(
-                                            'rounded-full px-2 py-1 text-xs font-semibold',
-                                            t.takeover_request_status ===
-                                                'approved'
-                                                ? 'bg-emerald-50 text-emerald-700'
-                                                : 'bg-amber-50 text-amber-800',
+                <>
+                    <div className="space-y-3">
+                        {items.map((ticket) => (
+                            <Link
+                                key={ticket.id}
+                                to={`/spv/tickets/${ticket.id}`}
+                                className="block rounded-xl border border-slate-200 bg-white p-4 hover:border-slate-300 focus-visible:outline-2 focus-visible:outline-blue-600"
+                            >
+                                <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
+                                    <div className="min-w-0">
+                                        <p className="text-xs font-semibold text-slate-500">
+                                            {ticket.ticket_number}
+                                        </p>
+                                        <h2 className="mt-1 text-sm font-semibold break-words text-slate-900">
+                                            {ticket.subject}
+                                        </h2>
+                                        <p className="mt-1 text-xs text-slate-600">
+                                            {ticket.customer?.name ??
+                                                ticket.customer?.phone_number ??
+                                                'Customer'}
+                                        </p>
+                                        {ticket.division?.name && (
+                                            <p className="mt-1 text-xs text-slate-600">
+                                                {ticket.division.name}
+                                            </p>
                                         )}
-                                    >
-                                        Takeover{' '}
-                                        {t.takeover_request_status ===
-                                        'approved'
-                                            ? 'Approved'
-                                            : 'Pending'}
-                                    </span>
-                                ) : null}
-                            </div>
-                        </Link>
-                    ))}
-                </div>
+                                    </div>
+                                    <p className="shrink-0 text-xs text-slate-500">
+                                        {formatDateTimeId(ticket.created_at)}
+                                    </p>
+                                </div>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    <StatusBadge status={ticket.status} />
+                                    <PriorityBadge priority={ticket.priority} />
+                                    {ticket.has_takeover_request && (
+                                        <span
+                                            className={`rounded-full px-2 py-1 text-xs font-semibold ${ticket.takeover_request_status === 'approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}
+                                        >
+                                            Takeover{' '}
+                                            {ticket.takeover_request_status ===
+                                            'approved'
+                                                ? 'Approved'
+                                                : 'Pending'}
+                                        </span>
+                                    )}
+                                </div>
+                            </Link>
+                        ))}
+                    </div>
+                    {result.total > 50 && (
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <Button
+                                variant="outline"
+                                disabled={page === 1}
+                                onClick={() => setPage(page - 1)}
+                            >
+                                Sebelumnya
+                            </Button>
+                            <p className="text-xs text-slate-600">
+                                Halaman {page} dari{' '}
+                                {Math.ceil(result.total / 50)}
+                            </p>
+                            <Button
+                                variant="outline"
+                                disabled={page * 50 >= result.total}
+                                onClick={() => setPage(page + 1)}
+                            >
+                                Berikutnya
+                            </Button>
+                        </div>
+                    )}
+                </>
             )}
         </div>
     );

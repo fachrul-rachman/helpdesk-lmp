@@ -1,46 +1,57 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
+import { refreshSession } from '../../lib/axios';
 import { getStoredRefreshToken, useAuthStore } from '../../stores/authStore';
-import { api } from '../../lib/axios';
-
-type RefreshResponse = {
-    access_token: string;
-    expires_in: number;
-};
 
 export function useAuthBootstrap() {
     const accessToken = useAuthStore((s) => s.accessToken);
     const refreshToken = useAuthStore((s) => s.refreshToken);
-    const setAccessToken = useAuthStore((s) => s.setAccessToken);
-    const clear = useAuthStore((s) => s.clear);
+    const sessionError = useAuthStore((s) => s.sessionError);
 
     const [isBootstrapping, setIsBootstrapping] = useState(true);
+    const [isRetrying, setIsRetrying] = useState(false);
+    const retry = useCallback(async () => {
+        setIsRetrying(true);
+
+        try {
+            await refreshSession();
+        } catch {
+            // The shared refresh handler distinguishes expired sessions from temporary failures.
+        } finally {
+            setIsRetrying(false);
+        }
+    }, []);
 
     useEffect(() => {
         let isMounted = true;
 
         async function run() {
             if (accessToken) {
-                if (isMounted) setIsBootstrapping(false);
+                if (isMounted) {
+                    setIsBootstrapping(false);
+                }
+
                 return;
             }
 
             const token = refreshToken ?? getStoredRefreshToken();
+
             if (!token) {
-                if (isMounted) setIsBootstrapping(false);
+                if (isMounted) {
+                    setIsBootstrapping(false);
+                }
+
                 return;
             }
 
             try {
-                const response = await api.post<RefreshResponse>('/api/auth/refresh', {
-                    refresh_token: token,
-                });
-
-                setAccessToken(response.data.access_token);
+                await refreshSession();
             } catch {
-                await clear();
+                // Preserve saved login on network/server errors so the user can retry.
             } finally {
-                if (isMounted) setIsBootstrapping(false);
+                if (isMounted) {
+                    setIsBootstrapping(false);
+                }
             }
         }
 
@@ -49,7 +60,20 @@ export function useAuthBootstrap() {
         return () => {
             isMounted = false;
         };
-    }, [accessToken, refreshToken, setAccessToken, clear]);
+    }, [accessToken, refreshToken]);
 
-    return { isBootstrapping };
+    useEffect(() => {
+        if (!sessionError || !refreshToken) {
+            return;
+        }
+
+        const reconnect = () => {
+            void retry();
+        };
+        window.addEventListener('online', reconnect);
+
+        return () => window.removeEventListener('online', reconnect);
+    }, [sessionError, refreshToken, retry]);
+
+    return { isBootstrapping, sessionError, retry, isRetrying, accessToken };
 }

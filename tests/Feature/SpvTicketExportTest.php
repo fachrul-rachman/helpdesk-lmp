@@ -58,6 +58,28 @@ function steTicket(Customer $customer, Division $division, array $attributes): T
     return $ticket->fresh();
 }
 
+test('SPV export supports division and multiple statuses while keeping legacy defaults', function () {
+    CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-10-20 10:00:00')->utc());
+    $spv = User::factory()->create(['role' => 'spv']);
+    $division = steDivision('Export filter');
+    $other = steDivision('Other export');
+    $customer = Customer::create(['phone_number' => '6281111111222', 'name' => 'Export']);
+    steTicket($customer, $division, ['subject' => 'New match', 'status' => 'new']);
+    steTicket($customer, $division, ['subject' => 'Open match', 'status' => 'open']);
+    steTicket($customer, $division, ['subject' => 'Excluded solved', 'status' => 'solved']);
+    steTicket($customer, $other, ['subject' => 'Excluded division', 'status' => 'new']);
+    $response = $this->get('/api/spv/tickets/export?'.http_build_query([
+        'period' => 'month', 'division_id' => $division->id, 'statuses' => ['new', 'open'],
+    ]), steAuth($spv))->assertOk();
+    $spreadsheet = IOFactory::load($response->baseResponse->getFile()->getPathname());
+    $sheet = $spreadsheet->getActiveSheet();
+    expect($sheet->getHighestDataRow())->toBe(4);
+    expect([$sheet->getCell('I3')->getValue(), $sheet->getCell('I4')->getValue()])->toContain('New match', 'Open match');
+    $spreadsheet->disconnectWorksheets();
+    $this->getJson('/api/spv/tickets/export?'.http_build_query(['period' => 'month', 'statuses' => ['invalid']]), steAuth($spv))->assertUnprocessable();
+    $this->getJson('/api/spv/tickets/export?'.http_build_query(['period' => 'custom', 'start_date' => '2024-01-01', 'end_date' => '2026-10-20']), steAuth($spv))->assertUnprocessable();
+});
+
 test('SPV dapat mengekspor ticket solved dan closed sesuai kolom laporan baru', function () {
     config(['app.business_timezone' => 'Asia/Jakarta']);
     CarbonImmutable::setTestNow(CarbonImmutable::parse('2026-06-22 10:00:00', 'Asia/Jakarta'));

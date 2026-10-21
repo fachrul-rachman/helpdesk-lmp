@@ -6,9 +6,14 @@ use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    Http::fake(['https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.test']]], 200)]);
+});
 
 function taAdminHeader(): array
 {
@@ -19,7 +24,7 @@ function taAdminHeader(): array
         'is_active' => true,
     ]);
 
-    return ['Authorization' => 'Bearer ' . JWTAuth::fromUser($admin)];
+    return ['Authorization' => 'Bearer '.JWTAuth::fromUser($admin)];
 }
 
 test('reassign saat PIC dinonaktifkan', function () {
@@ -72,4 +77,3 @@ test('reassign saat PIC dinonaktifkan', function () {
     expect($ticket->assigned_to)->not->toBe($picA->id);
     expect($ticket->assigned_to)->toBeIn([$picB->id]);
 });
-

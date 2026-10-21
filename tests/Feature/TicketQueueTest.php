@@ -6,9 +6,14 @@ use App\Models\Ticket;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Tymon\JWTAuth\Facades\JWTAuth;
 
 uses(RefreshDatabase::class);
+
+beforeEach(function () {
+    Http::fake(['https://graph.facebook.com/*' => Http::response(['messages' => [['id' => 'wamid.test']]], 200)]);
+});
 
 function tqDivision(): Division
 {
@@ -39,7 +44,7 @@ function tqPic(Division $division): User
 
 function tqAuth(User $user): array
 {
-    return ['Authorization' => 'Bearer ' . JWTAuth::fromUser($user)];
+    return ['Authorization' => 'Bearer '.JWTAuth::fromUser($user)];
 }
 
 test('queue logic: saat active ticket solved, ticket queue berikutnya otomatis aktif', function () {
@@ -98,4 +103,3 @@ test('queue logic: saat active ticket solved, ticket queue berikutnya otomatis a
 
     expect($queueLow->fresh()->status)->toBe('queue');
 });
-

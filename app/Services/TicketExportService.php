@@ -39,7 +39,8 @@ class TicketExportService
                 'sla_fr_completed_at',
                 'created_at',
             ])
-            ->whereIn('status', ['solved', 'closed'])
+            ->whereIn('status', $filters['statuses'] ?? ['solved', 'closed'])
+            ->when($filters['division_id'] ?? null, fn ($query, $id) => $query->where('division_id', $id))
             ->whereBetween('created_at', [
                 $from->utc(),
                 $until->utc(),
