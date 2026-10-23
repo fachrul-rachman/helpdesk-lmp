@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\WebPushService;
 use App\Support\PushEndpoint;
 use App\Support\TicketPushNotification;
+use GuzzleHttp\Client;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -73,7 +74,7 @@ class SendTicketPushJob implements ShouldBeUnique, ShouldQueue
                 'subject' => config('webpush.subject'),
                 'publicKey' => config('webpush.public_key'),
                 'privateKey' => config('webpush.private_key'),
-            ]], ['TTL' => max(1, $this->expiresAt - time())], 15, ['allow_redirects' => false]);
+            ]], ['TTL' => max(1, $this->expiresAt - time())], new Client(['timeout' => 15, 'allow_redirects' => false]));
             $report = $webPush->sendOneNotification(Subscription::create([
                 'endpoint' => $subscription->endpoint,
                 'keys' => ['p256dh' => $subscription->public_key, 'auth' => $subscription->auth_token],
@@ -85,9 +86,13 @@ class SendTicketPushJob implements ShouldBeUnique, ShouldQueue
 
         if ($report->isSubscriptionExpired()) {
             $subscription->delete();
-        } elseif (! $report->isSuccess()) {
-            $status = $report->getResponse()?->getStatusCode();
-            if ($status === null || $status === 429 || $status >= 500) {
+
+            return;
+        }
+
+        $status = $report->getResponse()?->getStatusCode();
+        if (! $report->isSuccess() || ($status !== null && $status >= 300 && $status < 400)) {
+            if ($status === null || ($status >= 300 && $status < 400) || $status === 429 || $status >= 500) {
                 throw new \RuntimeException('Web Push temporarily unavailable.');
             }
             Log::warning('webpush.delivery_rejected', ['subscription_id' => $subscription->id, 'status' => $status]);
